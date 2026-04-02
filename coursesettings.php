@@ -63,6 +63,7 @@ if (data_submitted() && confirm_sesskey()) {
     $newsettings['defaultview'] = optional_param('defaultview', '', PARAM_ALPHA);
     $newsettings['widgetposition'] = optional_param('widgetposition', '', PARAM_ALPHA);
     $newsettings['show_insights'] = optional_param('show_insights', '', PARAM_RAW_TRIMMED);
+    $newsettings['show_longitudinal'] = optional_param('show_longitudinal', '', PARAM_RAW_TRIMMED);
     $newsettings['gamification_enabled'] = (bool)optional_param('gamification_enabled', 0, PARAM_BOOL);
 
     // Widget overrides — only for site-enabled widgets.
@@ -85,6 +86,7 @@ if (data_submitted() && confirm_sesskey()) {
 $currentdefaultview = $coursesettings['defaultview'] ?? '';
 $currentwidgetposition = $coursesettings['widgetposition'] ?? '';
 $currentshowinsights = $coursesettings['show_insights'] ?? '';
+$currentshowlongitudinal = $coursesettings['show_longitudinal'] ?? '';
 $gamificationenabled = $coursesettings['gamification_enabled'] ?? false;
 $widgetoverrides = $coursesettings['widgets'] ?? [];
 
@@ -162,6 +164,31 @@ echo         get_string('coursesettings_show_insights_desc', 'gradereport_coifis
 echo '    </small>';
 echo '  </div>';
 echo '</div>';
+
+// Longitudinal profile override.
+if (class_exists('\local_coifish\api')) {
+    echo '<div class="form-group row mb-3">';
+    echo '  <label class="col-md-3 col-form-label" for="show_longitudinal"><strong>';
+    echo       get_string('coursesettings_show_longitudinal', 'gradereport_coifish');
+    echo '  </strong></label>';
+    echo '  <div class="col-md-6">';
+    echo '    <select class="form-select" id="show_longitudinal" name="show_longitudinal">';
+    $longitudinaloptions = [
+        '' => get_string('defaultview_usesite', 'gradereport_coifish'),
+        '1' => get_string('setting_enabled', 'gradereport_coifish'),
+        '0' => get_string('setting_disabled', 'gradereport_coifish'),
+    ];
+    foreach ($longitudinaloptions as $val => $label) {
+        $sel = ($currentshowlongitudinal === $val) ? ' selected' : '';
+        echo '      <option value="' . $val . '"' . $sel . '>' . $label . '</option>';
+    }
+    echo '    </select>';
+    echo '    <small class="form-text text-muted">';
+    echo         get_string('coursesettings_show_longitudinal_desc', 'gradereport_coifish');
+    echo '    </small>';
+    echo '  </div>';
+    echo '</div>';
+}
 
 // Gamification master toggle.
 echo '<div class="form-group row mb-3">';

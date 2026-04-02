@@ -108,6 +108,57 @@
             </div>
         {{/hasstats}}
 
+        {{! Longitudinal early warnings }}
+        {{#hasearlywarnings}}
+        <div class="gradetracker-cohort-earlywarnings mb-4">
+            <h5 class="gradetracker-cohort-section-title mb-2">
+                <i class="fa fa-history me-1 text-danger" aria-hidden="true"></i>
+                {{#str}}longitudinal_early_warning_title, gradereport_coifish{{/str}}
+            </h5>
+            <p class="text-muted small mb-3">
+                {{#str}}longitudinal_early_warning_desc, gradereport_coifish{{/str}}
+            </p>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>{{#str}}student, gradereport_coifish{{/str}}</th>
+                            <th class="text-center">{{#str}}longitudinal_col_risk, gradereport_coifish{{/str}}</th>
+                            <th>{{#str}}longitudinal_col_pattern, gradereport_coifish{{/str}}</th>
+                            <th>{{#str}}longitudinal_col_interventionresponse, gradereport_coifish{{/str}}</th>
+                            <th>{{#str}}longitudinal_col_factors, gradereport_coifish{{/str}}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#earlywarnings}}
+                        <tr>
+                            <td>
+                                <a href="{{viewurl}}" class="fw-semibold">{{fullname}}</a>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge
+                                    {{#isriskhigh}}bg-danger{{/isriskhigh}}
+                                    {{#isriskmoderate}}bg-warning text-dark{{/isriskmoderate}}
+                                ">{{risklabel}}</span>
+                            </td>
+                            <td class="small">{{engagementpatternlabel}}</td>
+                            <td class="small">
+                                {{#interventionresponselabel}}{{interventionresponselabel}}{{/interventionresponselabel}}
+                                {{^interventionresponselabel}}-{{/interventionresponselabel}}
+                            </td>
+                            <td>
+                                {{#riskfactors}}
+                                    <span class="badge bg-light text-dark border me-1 mb-1 small">{{.}}</span>
+                                {{/riskfactors}}
+                            </td>
+                        </tr>
+                        {{/earlywarnings}}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {{/hasearlywarnings}}
+
         {{! COI Presence breakdown }}
         <div class="gradetracker-cohort-presence mb-4">
             <h5 class="gradetracker-cohort-section-title mb-3">

@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.4.1] - 2026-04-02
+
+### Changed
+- Replaced inaccurate research citations: Dawson (2006) four-category claim removed, Macfadyen & Dawson r=.95 corrected to 2010 paper, Yorke (2003) replaced with Muljana & Luo (2019), Bawa (2016) attrition statistic softened.
+- Longitudinal profile integration with local_coifish: early warning section on cohort insights, student profile on insights tab.
+- Course-level toggle for longitudinal profiles in report settings.
+
+### Fixed
+- Capability lang string casing: "View COIfish user report" corrected to "View CoIFish user report".
+- Feedback loop widget lang key when no graded assignments exist.
+
 ## [2.4.0] - 2026-03-31
 
 ### Added

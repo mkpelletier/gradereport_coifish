@@ -216,6 +216,22 @@ class student_report implements renderable, templatable {
         $data->isteacherview = $this->isteacherview && $showinsights;
         if ($data->isteacherview) {
             $data->insights = $this->report->get_insights_data();
+
+            // Longitudinal profile from local_coifish (if installed and enabled for this course).
+            if (class_exists('\local_coifish\api')) {
+                $longioverride = $coursesettings['show_longitudinal'] ?? '';
+                $showlongitudinal = $longioverride !== '' ? ($longioverride === '1') : true;
+                if ($showlongitudinal) {
+                    $profile = \local_coifish\api::get_student_profile(
+                        $this->report->get_userid(),
+                        $this->report->courseid
+                    );
+                    if (!empty($profile['hasprofile'])) {
+                        $data->insights['longitudinalprofile'] = $profile;
+                    }
+                }
+            }
+
             // Intervention history for the student insights tab.
             $interventionenabled = get_config('gradereport_coifish', 'intervention_enabled');
             if ($interventionenabled === false || $interventionenabled !== '0') {

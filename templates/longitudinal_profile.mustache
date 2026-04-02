@@ -1,0 +1,124 @@
+{{!
+    @template gradereport_coifish/longitudinal_profile
+
+    Longitudinal student profile summary from local_coifish.
+    Shows historical patterns, risk indicators, and intervention response
+    to give teachers early-warning context before in-course data accumulates.
+
+    Context variables required for this template:
+    * hasprofile (bool) - Whether a longitudinal profile exists.
+
+    Example context (json):
+    {
+        "hasprofile": true,
+        "coursescompleted": 3,
+        "risklevel": "moderate",
+        "risklabel": "Moderate risk",
+        "isriskhigh": false,
+        "isriskmoderate": true,
+        "isrisklow": false,
+        "riskfactors": ["History of mid-semester engagement decline"],
+        "hasriskfactors": true,
+        "engagementpatternlabel": "Starts strong, fades mid-semester"
+    }
+}}
+{{#hasprofile}}
+<div class="gradetracker-longitudinal-profile mb-4">
+    <h5 class="mb-3">
+        <i class="fa fa-line-chart me-1" aria-hidden="true"></i>
+        {{#str}}profile_heading, local_coifish{{/str}}
+        <span class="badge bg-secondary ms-2">{{coursescompleted}} {{#str}}profile_courses_completed, local_coifish{{/str}}</span>
+    </h5>
+
+    <div class="row g-3 mb-3">
+        {{! Risk level card }}
+        <div class="col-sm-6 col-lg-3">
+            <div class="card text-center h-100
+                {{#isriskhigh}}border-danger{{/isriskhigh}}
+                {{#isriskmoderate}}border-warning{{/isriskmoderate}}
+                {{#isrisklow}}border-success{{/isrisklow}}
+            ">
+                <div class="card-body py-2">
+                    <div class="text-muted small">{{#str}}profile_early_warning, local_coifish{{/str}}</div>
+                    <div class="fs-4 fw-bold
+                        {{#isriskhigh}}text-danger{{/isriskhigh}}
+                        {{#isriskmoderate}}text-warning{{/isriskmoderate}}
+                        {{#isrisklow}}text-success{{/isrisklow}}
+                    ">{{risklabel}}</div>
+                </div>
+            </div>
+        </div>
+
+        {{! Engagement pattern }}
+        <div class="col-sm-6 col-lg-3">
+            <div class="card text-center h-100">
+                <div class="card-body py-2">
+                    <div class="text-muted small">{{#str}}profile_engagement_pattern, local_coifish{{/str}}</div>
+                    <div class="fs-6 fw-semibold">{{engagementpatternlabel}}</div>
+                </div>
+            </div>
+        </div>
+
+        {{! Academic trajectory (summary/full only) }}
+        {{#gradetrendlabel}}
+        <div class="col-sm-6 col-lg-3">
+            <div class="card text-center h-100">
+                <div class="card-body py-2">
+                    <div class="text-muted small">{{#str}}profile_academic_trajectory, local_coifish{{/str}}</div>
+                    <div class="fs-6 fw-semibold">{{gradetrendlabel}}</div>
+                </div>
+            </div>
+        </div>
+        {{/gradetrendlabel}}
+
+        {{! Intervention response (summary/full only) }}
+        {{#interventionresponselabel}}
+        <div class="col-sm-6 col-lg-3">
+            <div class="card text-center h-100">
+                <div class="card-body py-2">
+                    <div class="text-muted small">{{#str}}profile_intervention_history, local_coifish{{/str}}</div>
+                    <div class="fs-6 fw-semibold">{{interventionresponselabel}}</div>
+                </div>
+            </div>
+        </div>
+        {{/interventionresponselabel}}
+    </div>
+
+    {{! Risk factors }}
+    {{#hasriskfactors}}
+    <div class="mb-2">
+        {{#riskfactors}}
+            <span class="badge
+                {{#isriskhigh}}bg-danger{{/isriskhigh}}
+                {{#isriskmoderate}}bg-warning text-dark{{/isriskmoderate}}
+                {{^isriskhigh}}{{^isriskmoderate}}bg-secondary{{/isriskmoderate}}{{/isriskhigh}}
+                me-1 mb-1">
+                <i class="fa fa-exclamation-triangle me-1" aria-hidden="true"></i>{{.}}
+            </span>
+        {{/riskfactors}}
+    </div>
+    {{/hasriskfactors}}
+
+    {{! Prescriptive recommendations }}
+    {{#hasrecommendations}}
+    <div class="mt-3">
+        {{#recommendations}}
+            <div class="d-flex align-items-start mb-2 py-2 px-3 rounded gradetracker-profile-rec gradetracker-profile-rec-{{severity}}">
+                <i class="fa fa-{{icon}} me-2 mt-1" aria-hidden="true"></i>
+                <span class="small">{{text}}</span>
+            </div>
+        {{/recommendations}}
+    </div>
+    {{/hasrecommendations}}
+
+    {{! Additional metrics (full detail only) }}
+    {{#avggrade}}
+    <div class="small text-muted mt-2">
+        <span class="me-3"><strong>{{#str}}intervention_snapshot_grade, gradereport_coifish{{/str}}:</strong> {{avggrade}}%</span>
+        {{#avgsocial}}<span class="me-3"><strong>{{#str}}profile_social_presence, local_coifish{{/str}}:</strong> {{avgsocial}}%</span>{{/avgsocial}}
+        {{#avgselfregulation}}<span class="me-3"><strong>{{#str}}profile_selfregulation, local_coifish{{/str}}:</strong> {{avgselfregulation}}%</span>{{/avgselfregulation}}
+        {{#avgfeedbackpct}}<span><strong>{{#str}}intervention_snapshot_feedback, gradereport_coifish{{/str}}:</strong> {{avgfeedbackpct}}%</span>{{/avgfeedbackpct}}
+    </div>
+    {{/avggrade}}
+</div>
+{{/hasprofile}}

@@ -931,6 +931,40 @@
     border-color: #dee2e6;
 }
 
+/* ── Longitudinal profile ── */
+
+.gradetracker-longitudinal-profile {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1rem;
+    background: #f8f9fa;
+}
+
+.gradetracker-profile-rec {
+    border-left: 3px solid #dee2e6;
+    background: #fff;
+}
+
+.gradetracker-profile-rec-danger {
+    border-left-color: #dc3545;
+    background: #fff5f5;
+}
+
+.gradetracker-profile-rec-warning {
+    border-left-color: #ffc107;
+    background: #fffdf0;
+}
+
+.gradetracker-profile-rec-success {
+    border-left-color: #198754;
+    background: #f0fdf4;
+}
+
+.gradetracker-profile-rec-info {
+    border-left-color: #0dcaf0;
+    background: #f0faff;
+}
+
 /* ── Teacher Insights view ── */
 
 .gradetracker-insights {

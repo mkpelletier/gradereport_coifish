@@ -100,6 +100,19 @@ class summary_report implements renderable, templatable {
                 $data->cohortinsights['showsociogram'] = !empty($data->cohortinsights['hassociogram']);
             }
 
+            // Longitudinal early warnings from local_coifish (if installed and enabled).
+            if (class_exists('\local_coifish\api')) {
+                $longioverride = $coursesettings['show_longitudinal'] ?? '';
+                $showlongitudinal = $longioverride !== '' ? ($longioverride === '1') : true;
+                if ($showlongitudinal) {
+                    $earlywarnings = \local_coifish\api::get_early_warnings($this->report->courseid);
+                    if (!empty($earlywarnings)) {
+                        $data->cohortinsights['earlywarnings'] = $earlywarnings;
+                        $data->cohortinsights['hasearlywarnings'] = true;
+                    }
+                }
+            }
+
             // Preserve the active view across group/user changes.
             $data->defaultinsights = ($this->viewoverride === 'insights');
         }

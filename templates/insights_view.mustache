@@ -56,7 +56,16 @@
         }
     }
 }}
-{{! COI widgets — rendered at the top of the insights tab for teacher context }}
+{{! Longitudinal profile from local_coifish — shown first for historical context }}
+{{#insights}}
+    {{#longitudinalprofile}}
+        <div class="gradetracker-insights mt-3">
+            {{> gradereport_coifish/longitudinal_profile}}
+        </div>
+    {{/longitudinalprofile}}
+{{/insights}}
+
+{{! COI widgets — current course presence indicators }}
 {{> gradereport_coifish/progress_coi_widgets }}
 
 {{#insights}}
