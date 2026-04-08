@@ -179,6 +179,7 @@ class log_intervention extends external_api {
         }
 
         // Engagement: count of distinct activities interacted with.
+        $mintime = time() - 365 * 86400;
         $totalactivities = (int)$DB->count_records_sql(
             "SELECT COUNT(cm.id)
                FROM {course_modules} cm
@@ -191,8 +192,9 @@ class log_intervention extends external_api {
             "SELECT COUNT(DISTINCT l.contextinstanceid)
                FROM {logstore_standard_log} l
               WHERE l.courseid = :cid AND l.userid = :uid
-                AND l.action = 'viewed' AND l.target = 'course_module'",
-            ['cid' => $courseid, 'uid' => $studentid]
+                AND l.action = 'viewed' AND l.target = 'course_module'
+                AND l.timecreated > :mintime",
+            ['cid' => $courseid, 'uid' => $studentid, 'mintime' => $mintime]
         );
         $engagement = $totalactivities > 0 ? min(100, round(($engaged / $totalactivities) * 100)) : 0;
 
@@ -222,20 +224,22 @@ class log_intervention extends external_api {
             "SELECT COUNT(DISTINCT l.contextinstanceid)
                FROM {logstore_standard_log} l
               WHERE l.userid = :uid AND l.courseid = :cid
-                AND l.eventname IN (:ev1, :ev2)",
+                AND l.eventname IN (:ev1, :ev2)
+                AND l.timecreated > :mintime",
             [
                 'uid' => $studentid, 'cid' => $courseid,
                 'ev1' => '\\mod_assign\\event\\feedback_viewed',
                 'ev2' => '\\mod_assign\\event\\submission_status_viewed',
+                'mintime' => $mintime,
             ]
         );
         $feedbackpct = $totalfeedback > 0 ? min(100, round(($viewedfeedback / $totalfeedback) * 100)) : null;
 
-        // Days since last activity.
+        // Days since last activity (look back at most 365 days).
         $lastactive = $DB->get_field_sql(
             "SELECT MAX(timecreated) FROM {logstore_standard_log}
-              WHERE courseid = :cid AND userid = :uid",
-            ['cid' => $courseid, 'uid' => $studentid]
+              WHERE courseid = :cid AND userid = :uid AND timecreated > :mintime",
+            ['cid' => $courseid, 'uid' => $studentid, 'mintime' => $mintime]
         );
         $daysinactive = $lastactive ? (int)round((time() - $lastactive) / 86400) : null;
 

@@ -36,6 +36,14 @@ define(['core/chartjs-lazy'], function(ChartJS) {
                 return;
             }
 
+            // Read localised chart labels from data attribute.
+            var chartLabels = {};
+            try {
+                chartLabels = JSON.parse(container.getAttribute('data-labels') || '{}');
+            } catch (e) {
+                chartLabels = {};
+            }
+
             if (!chartData.length) {
                 return;
             }
@@ -61,14 +69,14 @@ define(['core/chartjs-lazy'], function(ChartJS) {
 
             var datasets = [
                 {
-                    label: 'Insights usage',
+                    label: chartLabels.insights || 'Insights usage',
                     data: chartData.map(function(t) {
                         return Math.round(t.insight * weights.insight);
                     }),
                     backgroundColor: 'rgba(54, 162, 235, 0.8)',
                 },
                 {
-                    label: 'Grading turnaround',
+                    label: chartLabels.grading || 'Grading turnaround',
                     data: chartData.map(function(t) {
                         return Math.round(t.grading * weights.grading);
                     }),
@@ -78,7 +86,7 @@ define(['core/chartjs-lazy'], function(ChartJS) {
 
             if (hasFeedback) {
                 datasets.push({
-                    label: 'Feedback quality',
+                    label: chartLabels.feedback || 'Feedback quality',
                     data: chartData.map(function(t) {
                         return Math.round((t.feedback || 0) * weights.feedback);
                     }),
@@ -88,14 +96,14 @@ define(['core/chartjs-lazy'], function(ChartJS) {
 
             datasets.push(
                 {
-                    label: 'Forum activity',
+                    label: chartLabels.forum || 'Forum activity',
                     data: chartData.map(function(t) {
                         return Math.round(t.forum * weights.forum);
                     }),
                     backgroundColor: 'rgba(153, 102, 255, 0.8)',
                 },
                 {
-                    label: 'Grade monitoring',
+                    label: chartLabels.monitoring || 'Grade monitoring',
                     data: chartData.map(function(t) {
                         return Math.round(t.monitoring * weights.monitoring);
                     }),
@@ -105,7 +113,7 @@ define(['core/chartjs-lazy'], function(ChartJS) {
 
             if (hasContent) {
                 datasets.push({
-                    label: 'Content updates',
+                    label: chartLabels.content || 'Content updates',
                     data: chartData.map(function(t) {
                         return Math.round(t.content * weights.content);
                     }),
@@ -115,14 +123,14 @@ define(['core/chartjs-lazy'], function(ChartJS) {
 
             datasets.push(
                 {
-                    label: 'Messaging',
+                    label: chartLabels.messaging || 'Messaging',
                     data: chartData.map(function(t) {
                         return Math.round(t.messaging * weights.messaging);
                     }),
                     backgroundColor: 'rgba(255, 99, 132, 0.8)',
                 },
                 {
-                    label: 'Active days',
+                    label: chartLabels.active || 'Active days',
                     data: chartData.map(function(t) {
                         return Math.round(t.active * weights.active);
                     }),

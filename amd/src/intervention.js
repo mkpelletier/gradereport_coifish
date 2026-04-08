@@ -104,7 +104,7 @@ const submitIntervention = () => {
 
     if (!actiontype) {
         Notification.addNotification({
-            message: 'Please select an action.',
+            message: $modal.attr('data-msg-noaction') || 'Please select an action.',
             type: 'error'
         });
         return;
@@ -120,7 +120,7 @@ const submitIntervention = () => {
 
     if (studentids.length === 0 && scope !== 'cohort') {
         Notification.addNotification({
-            message: 'Please select at least one student.',
+            message: $modal.attr('data-msg-nostudent') || 'Please select at least one student.',
             type: 'error'
         });
         return;
@@ -143,7 +143,7 @@ const submitIntervention = () => {
     }])[0].then((result) => {
         $modal.modal('hide');
         Notification.addNotification({
-            message: 'Intervention logged successfully.',
+            message: $modal.attr('data-msg-success') || 'Intervention logged successfully.',
             type: 'success'
         });
         $submitBtn.prop('disabled', false);

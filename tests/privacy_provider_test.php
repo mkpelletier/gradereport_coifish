@@ -20,7 +20,7 @@ use core_privacy\tests\provider_testcase;
 use gradereport_coifish\privacy\provider;
 
 /**
- * Privacy provider tests for the grade tracker report.
+ * Privacy provider tests for the CoIFish grade report.
  *
  * @package    gradereport_coifish
  * @copyright  2026 South African Theological Seminary (ict@sats.ac.za)
@@ -29,23 +29,42 @@ use gradereport_coifish\privacy\provider;
  */
 final class privacy_provider_test extends provider_testcase {
     /**
-     * Test that the provider implements the null_provider interface.
+     * Test that the provider implements the metadata provider interface.
      */
-    public function test_null_provider(): void {
+    public function test_metadata_provider(): void {
         $this->assertInstanceOf(
-            \core_privacy\local\metadata\null_provider::class,
+            \core_privacy\local\metadata\provider::class,
             new provider()
         );
     }
 
     /**
-     * Test that the reason string exists.
+     * Test that the provider implements the plugin provider interface.
      */
-    public function test_get_reason(): void {
-        $reason = provider::get_reason();
-        $this->assertEquals('privacy:metadata', $reason);
-        // Ensure the string actually exists.
-        $string = get_string($reason, 'gradereport_coifish');
-        $this->assertNotEmpty($string);
+    public function test_plugin_provider(): void {
+        $this->assertInstanceOf(
+            \core_privacy\local\request\plugin\provider::class,
+            new provider()
+        );
+    }
+
+    /**
+     * Test that the provider implements the userlist provider interface.
+     */
+    public function test_userlist_provider(): void {
+        $this->assertInstanceOf(
+            \core_privacy\local\request\core_userlist_provider::class,
+            new provider()
+        );
+    }
+
+    /**
+     * Test that metadata is returned.
+     */
+    public function test_get_metadata(): void {
+        $collection = new \core_privacy\local\metadata\collection('gradereport_coifish');
+        $collection = provider::get_metadata($collection);
+        $items = $collection->get_collection();
+        $this->assertNotEmpty($items);
     }
 }

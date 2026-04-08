@@ -171,6 +171,8 @@ define('gradereport_coifish/sociogram', [], function() {
                 return;
             }
 
+            var labelGrade = container.getAttribute('data-label-grade') || 'Grade';
+            var labelPosts = container.getAttribute('data-label-posts') || 'Posts';
             var passThreshold = parseFloat(container.getAttribute('data-pass-threshold')) || 50;
             var width = container.clientWidth || 600;
             var height = Math.min(width * 0.75, 450);
@@ -288,9 +290,14 @@ define('gradereport_coifish/sociogram', [], function() {
                 // Hover tooltip.
                 g.addEventListener('mouseenter', function(ev) {
                     var gradeStr = node.grade !== null && node.grade !== undefined ? node.grade + '%' : '–';
-                    tooltip.innerHTML = '<strong>' + node.label + '</strong><br>' +
-                        'Grade: ' + gradeStr + '<br>' +
-                        'Posts: ' + node.posts;
+                    tooltip.textContent = '';
+                    var strong = document.createElement('strong');
+                    strong.textContent = node.label;
+                    tooltip.appendChild(strong);
+                    tooltip.appendChild(document.createElement('br'));
+                    tooltip.appendChild(document.createTextNode(labelGrade + ': ' + gradeStr));
+                    tooltip.appendChild(document.createElement('br'));
+                    tooltip.appendChild(document.createTextNode(labelPosts + ': ' + node.posts));
                     tooltip.style.display = 'block';
                     tooltip.style.left = ev.offsetX + 12 + 'px';
                     tooltip.style.top = ev.offsetY - 10 + 'px';

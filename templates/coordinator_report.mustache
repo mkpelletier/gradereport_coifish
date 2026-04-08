@@ -3,6 +3,10 @@
 
     Template for the coordinator view showing teacher engagement analytics.
 
+    @package    gradereport_coifish
+    @copyright  2026 South African Theological Seminary (ict@sats.ac.za)
+    @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+
     Context variables required for this template:
     * hasdata (bool) - Whether teacher engagement data is available.
     * coursename (string) - The course name.
@@ -110,6 +114,7 @@
                 <div id="gradetracker-coordinator-chart"
                      class="gradetracker-coordinator-chart"
                      data-chart="{{chartjson}}"
+                     data-labels="{{labelsjson}}"
                      style="position: relative; max-width: 900px; margin: 0 auto;">
                     <canvas id="gradetracker-coordinator-canvas"></canvas>
                 </div>

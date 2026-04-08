@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.4.1] - 2026-04-08
+
+### Changed
+- Repository renamed to `moodle-gradereport_coifish` following Moodle plugin naming convention (#1).
+- Replaced `PARAM_RAW_TRIMMED` with `PARAM_ALPHANUMEXT` in course settings form for security (#4).
+- Added Moodle boilerplate headers to `styles.css` and template files (#5).
+- Moved inline stylesheets from setting templates to `styles.css` (#8).
+- Hard-coded JavaScript strings replaced with localised strings via data attributes and lang API (#6).
+- Replaced `innerHTML` in sociogram tooltip with safe DOM construction (#9).
+- Added time bounds (365-day lookback) to logstore queries in intervention snapshot capture (#2).
+- Full privacy provider implementation with metadata for intervention and feedback tables, export and delete support (#3).
+- Course settings page converted from PHP echo blocks to Mustache template with renderable class (#7).
+
 ## [2.4.1] - 2026-04-02
 
 ### Changed

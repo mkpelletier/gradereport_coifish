@@ -1,2 +1,6 @@
 .DS_Store
 cli/generate_test_data.php
+.gitnexus
+.claude/
+AGENTS.md
+CLAUDE.md

@@ -55,48 +55,6 @@
     <input type="hidden" name="{{name}}[enabled]" value="{{#enabled}}1{{/enabled}}{{^enabled}}0{{/enabled}}" id="{{id}}_enabledval">
     <input type="hidden" name="{{name}}[value]" value="{{value}}" id="{{id}}_val">
 </div>
-<style>
-    .gradetracker-optslider-disabled {
-        opacity: .4;
-        pointer-events: none;
-    }
-    .gradetracker-optslider-wrap .gradetracker-slider-input {
-        flex: 1;
-        min-width: 180px;
-        height: 6px;
-        -webkit-appearance: none;
-        appearance: none;
-        background: #dee2e6;
-        border-radius: 3px;
-        outline: none;
-        cursor: pointer;
-    }
-    .gradetracker-optslider-wrap .gradetracker-slider-input::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        appearance: none;
-        width: 18px;
-        height: 18px;
-        border-radius: 50%;
-        background: #0d6efd;
-        cursor: pointer;
-        border: 2px solid #fff;
-        box-shadow: 0 1px 3px rgba(0,0,0,.2);
-    }
-    .gradetracker-optslider-wrap .gradetracker-slider-input::-moz-range-thumb {
-        width: 18px;
-        height: 18px;
-        border-radius: 50%;
-        background: #0d6efd;
-        cursor: pointer;
-        border: 2px solid #fff;
-        box-shadow: 0 1px 3px rgba(0,0,0,.2);
-    }
-    .gradetracker-optslider-wrap .gradetracker-slider-value {
-        min-width: 50px;
-        text-align: center;
-        font-variant-numeric: tabular-nums;
-    }
-</style>
 <script>
     (function() {
         var checkbox = document.getElementById('{{id}}_enabled');

@@ -89,6 +89,16 @@ class coordinator_report implements renderable, templatable {
                 $chartdata[] = $entry;
             }
             $data->chartjson = json_encode($chartdata);
+            $data->labelsjson = json_encode([
+                'insights' => get_string('coord_chart_insights', 'gradereport_coifish'),
+                'grading' => get_string('coord_chart_grading', 'gradereport_coifish'),
+                'feedback' => get_string('coord_chart_feedback', 'gradereport_coifish'),
+                'forum' => get_string('coord_chart_forum', 'gradereport_coifish'),
+                'monitoring' => get_string('coord_chart_monitoring', 'gradereport_coifish'),
+                'content' => get_string('coord_chart_content', 'gradereport_coifish'),
+                'messaging' => get_string('coord_chart_messaging', 'gradereport_coifish'),
+                'active' => get_string('coord_chart_active', 'gradereport_coifish'),
+            ]);
         }
 
         // Cross-teacher comparison (student outcomes by teacher).

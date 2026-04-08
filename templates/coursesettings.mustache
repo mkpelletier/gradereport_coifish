@@ -1,0 +1,156 @@
+{{!
+    @template gradereport_coifish/coursesettings
+
+    Course-level settings form for the Grade Tracker report.
+
+    Context variables required for this template:
+    * actionurl (string) - The form action URL.
+    * returnurl (string) - The cancel/return URL.
+    * sesskey (string) - The session key for CSRF protection.
+    * viewoptions (array) - Default view select options.
+    * positionoptions (array) - Widget position select options.
+    * insightsoptions (array) - Insights tab override options.
+    * showlongitudinal (bool) - Whether to show longitudinal section.
+    * longitudinaloptions (array) - Longitudinal override options.
+    * gamificationenabled (bool) - Whether gamification is currently enabled.
+    * haswidgets (bool) - Whether site-enabled widgets exist.
+    * widgets (array) - Widget override checkboxes.
+
+    Example context (json):
+    {
+        "actionurl": "/grade/report/coifish/coursesettings.php?id=2",
+        "returnurl": "/grade/report/coifish/index.php?id=2",
+        "sesskey": "abc123",
+        "viewoptions": [{"value": "", "label": "Use site default", "selected": true}],
+        "positionoptions": [{"value": "", "label": "Use site default", "selected": true}],
+        "insightsoptions": [{"value": "", "label": "Use site default", "selected": true}],
+        "showlongitudinal": false,
+        "longitudinaloptions": [],
+        "gamificationenabled": false,
+        "haswidgets": false,
+        "widgets": []
+    }
+
+    @package    gradereport_coifish
+    @copyright  2026 South African Theological Seminary (ict@sats.ac.za)
+    @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+}}
+<form method="post" action="{{actionurl}}">
+    <input type="hidden" name="sesskey" value="{{sesskey}}">
+
+    {{! Default view selector }}
+    <div class="form-group row mb-3">
+        <label class="col-md-3 col-form-label" for="defaultview"><strong>
+            {{#str}}coursesettings_defaultview, gradereport_coifish{{/str}}
+        </strong></label>
+        <div class="col-md-6">
+            <select class="form-select" id="defaultview" name="defaultview">
+                {{#viewoptions}}
+                    <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
+                {{/viewoptions}}
+            </select>
+            <small class="form-text text-muted">
+                {{#str}}coursesettings_defaultview_desc, gradereport_coifish{{/str}}
+            </small>
+        </div>
+    </div>
+
+    {{! Widget position selector }}
+    <div class="form-group row mb-3">
+        <label class="col-md-3 col-form-label" for="widgetposition"><strong>
+            {{#str}}coursesettings_widgetposition, gradereport_coifish{{/str}}
+        </strong></label>
+        <div class="col-md-6">
+            <select class="form-select" id="widgetposition" name="widgetposition">
+                {{#positionoptions}}
+                    <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
+                {{/positionoptions}}
+            </select>
+            <small class="form-text text-muted">
+                {{#str}}coursesettings_widgetposition_desc, gradereport_coifish{{/str}}
+            </small>
+        </div>
+    </div>
+
+    {{! Insights tab override }}
+    <div class="form-group row mb-3">
+        <label class="col-md-3 col-form-label" for="show_insights"><strong>
+            {{#str}}coursesettings_show_insights, gradereport_coifish{{/str}}
+        </strong></label>
+        <div class="col-md-6">
+            <select class="form-select" id="show_insights" name="show_insights">
+                {{#insightsoptions}}
+                    <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
+                {{/insightsoptions}}
+            </select>
+            <small class="form-text text-muted">
+                {{#str}}coursesettings_show_insights_desc, gradereport_coifish{{/str}}
+            </small>
+        </div>
+    </div>
+
+    {{! Longitudinal profile override }}
+    {{#showlongitudinal}}
+    <div class="form-group row mb-3">
+        <label class="col-md-3 col-form-label" for="show_longitudinal"><strong>
+            {{#str}}coursesettings_show_longitudinal, gradereport_coifish{{/str}}
+        </strong></label>
+        <div class="col-md-6">
+            <select class="form-select" id="show_longitudinal" name="show_longitudinal">
+                {{#longitudinaloptions}}
+                    <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
+                {{/longitudinaloptions}}
+            </select>
+            <small class="form-text text-muted">
+                {{#str}}coursesettings_show_longitudinal_desc, gradereport_coifish{{/str}}
+            </small>
+        </div>
+    </div>
+    {{/showlongitudinal}}
+
+    {{! Gamification master toggle }}
+    <div class="form-group row mb-3">
+        <div class="col-md-9">
+            <div class="form-check form-switch">
+                <input type="hidden" name="gamification_enabled" value="0">
+                <input type="checkbox" class="form-check-input" id="gamification_enabled"
+                       name="gamification_enabled" value="1" {{#gamificationenabled}}checked{{/gamificationenabled}}>
+                <label class="form-check-label" for="gamification_enabled">
+                    {{#str}}coursesettings_gamification_enabled, gradereport_coifish{{/str}}
+                </label>
+            </div>
+            <small class="form-text text-muted">
+                {{#str}}coursesettings_gamification_enabled_desc, gradereport_coifish{{/str}}
+            </small>
+        </div>
+    </div>
+
+    {{! Widget selection }}
+    {{#haswidgets}}
+    <div class="form-group row mb-3">
+        <label class="col-md-12 mb-2"><strong>
+            {{#str}}coursesettings_widget_override, gradereport_coifish{{/str}}
+        </strong></label>
+        <div class="col-md-9">
+            <small class="form-text text-muted mb-2 d-block">
+                {{#str}}coursesettings_widget_override_desc, gradereport_coifish{{/str}}
+            </small>
+            {{#widgets}}
+            <div class="form-check mb-1">
+                <input type="hidden" name="widget_{{key}}" value="0">
+                <input type="checkbox" class="form-check-input" id="widget_{{key}}"
+                       name="widget_{{key}}" value="1" {{#checked}}checked{{/checked}}>
+                <label class="form-check-label" for="widget_{{key}}">{{label}}</label>
+            </div>
+            {{/widgets}}
+        </div>
+    </div>
+    {{/haswidgets}}
+
+    <div class="form-group row">
+        <div class="col-md-9">
+            <button type="submit" class="btn btn-primary">{{#str}}savechanges{{/str}}</button>
+            <a href="{{returnurl}}" class="btn btn-secondary ms-2">{{#str}}cancel{{/str}}</a>
+        </div>
+    </div>
+</form>

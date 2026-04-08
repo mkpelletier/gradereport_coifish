@@ -1,3 +1,11 @@
+/**
+ * Styles for the CoIFish grade report plugin.
+ *
+ * @package    gradereport_coifish
+ * @copyright  2026 South African Theological Seminary (ict@sats.ac.za)
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
 /* Grade Tracker report styles. */
 
 .gradereport-coifish .gradeoverview-category-header {
@@ -1611,4 +1619,195 @@
 
 .gradetracker-coordinator-chart {
     min-height: 200px;
+}
+
+/* ── Slider settings (from setting_configslider template) ── */
+
+.gradetracker-slider-wrap {
+    min-width: 320px;
+}
+.gradetracker-slider-input {
+    flex: 1;
+    min-width: 180px;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #dee2e6;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+.gradetracker-slider-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #0d6efd;
+    cursor: pointer;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.gradetracker-slider-input::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #0d6efd;
+    cursor: pointer;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.gradetracker-slider-input:focus::-webkit-slider-thumb {
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, .25);
+}
+.gradetracker-slider-input:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+.gradetracker-slider-value {
+    min-width: 50px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Optional slider settings (from setting_configoptionalslider template) ── */
+
+.gradetracker-optslider-disabled {
+    opacity: .4;
+    pointer-events: none;
+}
+.gradetracker-optslider-wrap .gradetracker-slider-input {
+    flex: 1;
+    min-width: 180px;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #dee2e6;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+.gradetracker-optslider-wrap .gradetracker-slider-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #0d6efd;
+    cursor: pointer;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.gradetracker-optslider-wrap .gradetracker-slider-input::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #0d6efd;
+    cursor: pointer;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.gradetracker-optslider-wrap .gradetracker-slider-value {
+    min-width: 50px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Level boundary settings (from setting_configlevels template) ── */
+
+.gradetracker-levels-wrap {
+    max-width: 500px;
+}
+.gradetracker-levels-bar {
+    display: flex;
+    height: 14px;
+    border-radius: 7px;
+    overflow: hidden;
+    border: 1px solid #dee2e6;
+}
+.gradetracker-levels-zone {
+    transition: width .15s ease;
+}
+.gradetracker-zone-none {
+    background: #e9ecef;
+}
+
+.gradetracker-zone-emerging {
+    background: #ffc107;
+}
+
+.gradetracker-zone-developing {
+    background: #0dcaf0;
+}
+
+.gradetracker-zone-established {
+    background: #198754;
+}
+
+.gradetracker-zone-exemplary {
+    background: #6f42c1;
+}
+
+.gradetracker-zone-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.gradetracker-zone-dot-0 {
+    background: #ffc107;
+}
+
+.gradetracker-zone-dot-1 {
+    background: #0dcaf0;
+}
+
+.gradetracker-zone-dot-2 {
+    background: #198754;
+}
+
+.gradetracker-zone-dot-3 {
+    background: #6f42c1;
+}
+
+.gradetracker-levels-slider {
+    flex: 1;
+    min-width: 140px;
+    height: 5px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #dee2e6;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+.gradetracker-levels-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #495057;
+    cursor: pointer;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.gradetracker-levels-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #495057;
+    cursor: pointer;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.gradetracker-levels-val {
+    min-width: 42px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.8rem;
+}
+.gradetracker-levels-label-text {
+    color: #6c757d;
 }

@@ -62,8 +62,8 @@ if (data_submitted() && confirm_sesskey()) {
 
     $newsettings['defaultview'] = optional_param('defaultview', '', PARAM_ALPHA);
     $newsettings['widgetposition'] = optional_param('widgetposition', '', PARAM_ALPHA);
-    $newsettings['show_insights'] = optional_param('show_insights', '', PARAM_RAW_TRIMMED);
-    $newsettings['show_longitudinal'] = optional_param('show_longitudinal', '', PARAM_RAW_TRIMMED);
+    $newsettings['show_insights'] = optional_param('show_insights', '', PARAM_ALPHANUMEXT);
+    $newsettings['show_longitudinal'] = optional_param('show_longitudinal', '', PARAM_ALPHANUMEXT);
     $newsettings['gamification_enabled'] = (bool)optional_param('gamification_enabled', 0, PARAM_BOOL);
 
     // Widget overrides — only for site-enabled widgets.
@@ -82,162 +82,16 @@ if (data_submitted() && confirm_sesskey()) {
     );
 }
 
-// Determine current values.
-$currentdefaultview = $coursesettings['defaultview'] ?? '';
-$currentwidgetposition = $coursesettings['widgetposition'] ?? '';
-$currentshowinsights = $coursesettings['show_insights'] ?? '';
-$currentshowlongitudinal = $coursesettings['show_longitudinal'] ?? '';
-$gamificationenabled = $coursesettings['gamification_enabled'] ?? false;
-$widgetoverrides = $coursesettings['widgets'] ?? [];
-
 echo $OUTPUT->header();
 echo $OUTPUT->heading(get_string('coursesettings_title', 'gradereport_coifish', $course->shortname));
 
-echo '<form method="post" action="' . $pageurl->out(true) . '">';
-echo '<input type="hidden" name="sesskey" value="' . sesskey() . '">';
+$renderable = new \gradereport_coifish\output\coursesettings(
+    $courseid,
+    $coursesettings,
+    $sitewidgets,
+    $pageurl,
+    $returnurl
+);
+echo $OUTPUT->render_from_template('gradereport_coifish/coursesettings', $renderable->export_for_template($OUTPUT));
 
-// Default view selector.
-echo '<div class="form-group row mb-3">';
-echo '  <label class="col-md-3 col-form-label" for="defaultview"><strong>';
-echo       get_string('coursesettings_defaultview', 'gradereport_coifish');
-echo '  </strong></label>';
-echo '  <div class="col-md-6">';
-echo '    <select class="form-select" id="defaultview" name="defaultview">';
-$viewoptions = [
-    '' => get_string('defaultview_usesite', 'gradereport_coifish'),
-    'table' => get_string('defaultview_table', 'gradereport_coifish'),
-    'progress' => get_string('defaultview_progress', 'gradereport_coifish'),
-];
-foreach ($viewoptions as $val => $label) {
-    $sel = ($currentdefaultview === $val) ? ' selected' : '';
-    echo '      <option value="' . $val . '"' . $sel . '>' . $label . '</option>';
-}
-echo '    </select>';
-echo '    <small class="form-text text-muted">';
-echo         get_string('coursesettings_defaultview_desc', 'gradereport_coifish');
-echo '    </small>';
-echo '  </div>';
-echo '</div>';
-
-// Widget position selector.
-echo '<div class="form-group row mb-3">';
-echo '  <label class="col-md-3 col-form-label" for="widgetposition"><strong>';
-echo       get_string('coursesettings_widgetposition', 'gradereport_coifish');
-echo '  </strong></label>';
-echo '  <div class="col-md-6">';
-echo '    <select class="form-select" id="widgetposition" name="widgetposition">';
-$positionoptions = [
-    '' => get_string('defaultview_usesite', 'gradereport_coifish'),
-    'top' => get_string('widgetposition_top', 'gradereport_coifish'),
-    'bottom' => get_string('widgetposition_bottom', 'gradereport_coifish'),
-];
-foreach ($positionoptions as $val => $label) {
-    $sel = ($currentwidgetposition === $val) ? ' selected' : '';
-    echo '      <option value="' . $val . '"' . $sel . '>' . $label . '</option>';
-}
-echo '    </select>';
-echo '    <small class="form-text text-muted">';
-echo         get_string('coursesettings_widgetposition_desc', 'gradereport_coifish');
-echo '    </small>';
-echo '  </div>';
-echo '</div>';
-
-// Insights tab override.
-echo '<div class="form-group row mb-3">';
-echo '  <label class="col-md-3 col-form-label" for="show_insights"><strong>';
-echo       get_string('coursesettings_show_insights', 'gradereport_coifish');
-echo '  </strong></label>';
-echo '  <div class="col-md-6">';
-echo '    <select class="form-select" id="show_insights" name="show_insights">';
-$insightsoptions = [
-    '' => get_string('defaultview_usesite', 'gradereport_coifish'),
-    '1' => get_string('setting_enabled', 'gradereport_coifish'),
-    '0' => get_string('setting_disabled', 'gradereport_coifish'),
-];
-foreach ($insightsoptions as $val => $label) {
-    $sel = ($currentshowinsights === $val) ? ' selected' : '';
-    echo '      <option value="' . $val . '"' . $sel . '>' . $label . '</option>';
-}
-echo '    </select>';
-echo '    <small class="form-text text-muted">';
-echo         get_string('coursesettings_show_insights_desc', 'gradereport_coifish');
-echo '    </small>';
-echo '  </div>';
-echo '</div>';
-
-// Longitudinal profile override.
-if (class_exists('\local_coifish\api')) {
-    echo '<div class="form-group row mb-3">';
-    echo '  <label class="col-md-3 col-form-label" for="show_longitudinal"><strong>';
-    echo       get_string('coursesettings_show_longitudinal', 'gradereport_coifish');
-    echo '  </strong></label>';
-    echo '  <div class="col-md-6">';
-    echo '    <select class="form-select" id="show_longitudinal" name="show_longitudinal">';
-    $longitudinaloptions = [
-        '' => get_string('defaultview_usesite', 'gradereport_coifish'),
-        '1' => get_string('setting_enabled', 'gradereport_coifish'),
-        '0' => get_string('setting_disabled', 'gradereport_coifish'),
-    ];
-    foreach ($longitudinaloptions as $val => $label) {
-        $sel = ($currentshowlongitudinal === $val) ? ' selected' : '';
-        echo '      <option value="' . $val . '"' . $sel . '>' . $label . '</option>';
-    }
-    echo '    </select>';
-    echo '    <small class="form-text text-muted">';
-    echo         get_string('coursesettings_show_longitudinal_desc', 'gradereport_coifish');
-    echo '    </small>';
-    echo '  </div>';
-    echo '</div>';
-}
-
-// Gamification master toggle.
-echo '<div class="form-group row mb-3">';
-echo '  <div class="col-md-9">';
-echo '    <div class="form-check form-switch">';
-echo '      <input type="hidden" name="gamification_enabled" value="0">';
-echo '      <input type="checkbox" class="form-check-input" id="gamification_enabled" ';
-echo '             name="gamification_enabled" value="1"' . ($gamificationenabled ? ' checked' : '') . '>';
-echo '      <label class="form-check-label" for="gamification_enabled">';
-echo           get_string('coursesettings_gamification_enabled', 'gradereport_coifish');
-echo '      </label>';
-echo '    </div>';
-echo '    <small class="form-text text-muted">';
-echo         get_string('coursesettings_gamification_enabled_desc', 'gradereport_coifish');
-echo '    </small>';
-echo '  </div>';
-echo '</div>';
-
-// Widget selection.
-if (!empty($sitewidgets)) {
-    echo '<div class="form-group row mb-3">';
-    echo '  <label class="col-md-12 mb-2"><strong>';
-    echo       get_string('coursesettings_widget_override', 'gradereport_coifish');
-    echo '  </strong></label>';
-    echo '  <div class="col-md-9">';
-    echo '    <small class="form-text text-muted mb-2 d-block">';
-    echo         get_string('coursesettings_widget_override_desc', 'gradereport_coifish');
-    echo '    </small>';
-
-    foreach ($sitewidgets as $key => $label) {
-        $checked = $widgetoverrides[$key] ?? true; // Default to on if no override.
-        echo '    <div class="form-check mb-1">';
-        echo '      <input type="hidden" name="widget_' . $key . '" value="0">';
-        echo '      <input type="checkbox" class="form-check-input" id="widget_' . $key . '" ';
-        echo '             name="widget_' . $key . '" value="1"' . ($checked ? ' checked' : '') . '>';
-        echo '      <label class="form-check-label" for="widget_' . $key . '">' . $label . '</label>';
-        echo '    </div>';
-    }
-
-    echo '  </div>';
-    echo '</div>';
-}
-
-echo '<div class="form-group row">';
-echo '  <div class="col-md-9">';
-echo '    <button type="submit" class="btn btn-primary">' . get_string('savechanges') . '</button>';
-echo '    <a href="' . $returnurl->out(true) . '" class="btn btn-secondary ms-2">' . get_string('cancel') . '</a>';
-echo '  </div>';
-echo '</div>';
-
-echo '</form>';
 echo $OUTPUT->footer();
