@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="grade/report/coifish/db" VERSION="2026033000" COMMENT="CoIFish grade report plugin tables">
+<XMLDB PATH="grade/report/coifish/db" VERSION="2026033000" COMMENT="CoIFish grade report plugin tables"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../../lib/xmldb/xmldb.xsd"
+>
   <TABLES>
     <TABLE NAME="gradereport_coifish_feedback" COMMENT="Cached feedback quality metrics per teacher per course, calculated by scheduled task.">
       <FIELDS>

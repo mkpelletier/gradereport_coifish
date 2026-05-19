@@ -178,16 +178,14 @@ class log_intervention extends external_api {
             }
         }
 
+        // Clamp "now" to the course end date for concluded courses so the
+        // snapshot's lookback window and "days inactive" don't keep drifting.
+        $coursenow = self::effective_now_for_course($courseid);
+
         // Engagement: count of distinct activities interacted with.
-        $mintime = time() - 365 * 86400;
-        $totalactivities = (int)$DB->count_records_sql(
-            "SELECT COUNT(cm.id)
-               FROM {course_modules} cm
-               JOIN {modules} m ON m.id = cm.module
-              WHERE cm.course = :cid AND cm.deletioninprogress = 0
-                AND m.name IN ('assign', 'quiz', 'page', 'book', 'resource', 'url', 'folder')",
-            ['cid' => $courseid]
-        );
+        // Drop/keep-aware: optional assignments/quizzes are excluded from the denominator.
+        $mintime = $coursenow - 365 * 86400;
+        $totalactivities = \gradereport_coifish\report::get_expected_activity_count($courseid);
         $engaged = (int)$DB->count_records_sql(
             "SELECT COUNT(DISTINCT l.contextinstanceid)
                FROM {logstore_standard_log} l
@@ -269,7 +267,7 @@ class log_intervention extends external_api {
               WHERE courseid = :cid AND userid = :uid AND timecreated > :mintime",
             ['cid' => $courseid, 'uid' => $studentid, 'mintime' => $mintime]
         );
-        $daysinactive = $lastactive ? (int)round((time() - $lastactive) / 86400) : null;
+        $daysinactive = $lastactive ? (int)round(($coursenow - $lastactive) / 86400) : null;
 
         return [
             'grade' => $grade,
@@ -278,5 +276,18 @@ class log_intervention extends external_api {
             'feedbackpct' => $feedbackpct,
             'daysinactive' => $daysinactive,
         ];
+    }
+
+    /**
+     * Effective "now" for a course — clamped to enddate when the course has concluded.
+     *
+     * @param int $courseid
+     * @return int Unix timestamp.
+     */
+    protected static function effective_now_for_course(int $courseid): int {
+        global $DB;
+        $now = time();
+        $enddate = (int)$DB->get_field('course', 'enddate', ['id' => $courseid]);
+        return ($enddate > 0 && $enddate < $now) ? $enddate : $now;
     }
 }

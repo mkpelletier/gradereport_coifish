@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.5.2] - 2026-05-19
+
+### Added
+- **Group support** in the report and insights tabs. New `gradereport/coifish:viewallgroups` capability controls whether a role can see every group in a course; default ALLOW for editingteacher/manager, unset for non-editing teacher. Teachers without the capability see only the groups they're a member of, and the default "All my groups" selector unions those memberships rather than exposing every enrolled student. `groupid` URL tampering is validated and silently dropped when the viewer isn't entitled to the requested group.
+- **Drop-the-lowest / keep-the-highest awareness** across the report.
+  - Category aggregation metadata (`droplow`, `keephigh`) is now displayed alongside the category weight in both the table view and the progress chart.
+  - Per-category running totals, the progress chart, best-possible, goal-target bisection, the bulk running-average column in the teacher summary, and the streak/trend/milestones diagnostics all skip items the category will discard.
+  - The "X of Y graded" ring on each category bar now reflects the effective expected count after drop/keep, so optional assignments no longer make completion look incomplete.
+- **Effective-now clamping for concluded courses** — new `report::effective_now()` returns `min(time(), $course->enddate)` when the course has ended. Wired into staleness/days-inactive diagnostics, cohort flags, weeks-enrolled anchors, the 30-day activity-balance window, and the 365-day collaboration lookback. Intervention snapshots in `log_intervention.php` clamp the same way. Closed courses no longer drift further into "X days absent" territory.
+- **Drop/keep-aware engagement denominator** — new `report::get_expected_activity_count()` excludes optional assignments/quizzes from the engagement metric in cohort insights, the at-risk modal, intervention snapshots, and local_coifish longitudinal snapshots.
+
+### Fixed
+- Teacher summary "running average" column was computing a flat weighted mean across all grade items; now walks the category tree per-student and honors drop/keep.
+- Pass-streak / trend / milestones diagnostics no longer treat would-be-dropped assignments as missed work.
+- install.xml now declares the XMLDB schema namespace (resolves `core\db\plugin_checks_test::test_db_install_file` failure).
+
 ## [2.4.2] - 2026-04-09
 
 ### Changed

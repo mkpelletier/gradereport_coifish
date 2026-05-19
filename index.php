@@ -105,6 +105,13 @@ if (!$canviewall) {
     if ($viewparam === 'coordinator') {
         $viewparam = '';
     }
+} else if ($groupid > 0 && !has_capability('gradereport/coifish:viewallgroups', $context)) {
+    // Teacher requesting a specific group must be a member of it.
+    $usergroups = groups_get_user_groups($courseid, $USER->id);
+    $mygroupids = $usergroups[0] ?? [];
+    if (!in_array((int)$groupid, array_map('intval', $mygroupids), true)) {
+        $groupid = 0;
+    }
 }
 
 // Instantiate the report.

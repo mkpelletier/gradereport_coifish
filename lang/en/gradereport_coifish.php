@@ -24,6 +24,11 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['aggregation_droplow'] = 'Drop the lowest {$a}';
+$string['aggregation_droplow_help'] = 'When marks are computed, the {$a} lowest scores in this category are removed before averaging.';
+$string['aggregation_keephigh'] = 'Keep the highest {$a}';
+$string['aggregation_keephigh_help'] = 'When marks are computed, only the {$a} highest scores in this category are used; the rest are ignored.';
+$string['allmygroups'] = 'All my groups';
 $string['analytics'] = 'Analytics thresholds';
 $string['analytics_desc'] = 'Configure the thresholds used by cohort insights, COI level classification, and diagnostic card triggers. These settings affect how aggressively the system flags concerns.';
 $string['assessment'] = 'Assessment';
@@ -138,6 +143,7 @@ $string['coi_stale_student'] = 'You haven\'t been active here for {$a} days. Re-
 $string['coi_stale_teacher'] = 'This student has been inactive for {$a} days. Consider reaching out to check in.';
 $string['coifish:intervene'] = 'Log interventions for students';
 $string['coifish:view'] = 'View CoIFish user report';
+$string['coifish:viewallgroups'] = 'View all groups in the CoIFish report';
 $string['coifish:viewcoordinator'] = 'View coordinator analytics tab';
 $string['contribution'] = 'Contribution';
 $string['coord_ago'] = 'ago';

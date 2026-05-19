@@ -33,11 +33,16 @@
     }
 }}
 <div class="gradeoverview-category mb-4">
-    <h4 class="gradeoverview-category-header d-flex align-items-center">
+    <h4 class="gradeoverview-category-header d-flex align-items-center flex-wrap">
         {{categoryname}}
         {{#hasweight}}
             <span class="badge gradeoverview-weight-badge ms-2">{{categoryweight}}</span>
         {{/hasweight}}
+        {{#has_aggregation_label}}
+            <span class="badge bg-info-subtle text-info-emphasis ms-2">
+                <i class="fa fa-filter me-1" aria-hidden="true"></i>{{aggregation_label}}
+            </span>
+        {{/has_aggregation_label}}
     </h4>
 
     {{#hasitems}}

@@ -91,9 +91,9 @@ class action_bar implements renderable, templatable {
 
         // Group selector — only if groups are enabled in the course.
         $data->hasgroups = false;
+        $canviewallgroups = has_capability('gradereport/coifish:viewallgroups', $this->context);
         if ($course->groupmode != NOGROUPS) {
-            $accessallgroups = has_capability('moodle/site:accessallgroups', $this->context);
-            if ($accessallgroups) {
+            if ($canviewallgroups) {
                 $groups = groups_get_all_groups($this->courseid, 0, $course->defaultgroupingid);
             } else {
                 $groups = groups_get_all_groups($this->courseid, $USER->id, $course->defaultgroupingid);
@@ -102,9 +102,12 @@ class action_bar implements renderable, templatable {
             if (!empty($groups)) {
                 $data->hasgroups = true;
                 $data->groups = [];
+                $defaultlabel = $canviewallgroups
+                    ? get_string('allparticipants')
+                    : get_string('allmygroups', 'gradereport_coifish');
                 $data->groups[] = [
                     'groupid' => 0,
-                    'groupname' => get_string('allparticipants'),
+                    'groupname' => $defaultlabel,
                     'selected' => ($this->groupid == 0),
                 ];
                 foreach ($groups as $group) {
@@ -117,14 +120,42 @@ class action_bar implements renderable, templatable {
             }
         }
 
-        // User selector — only students (not teachers/managers).
-        $enrolledusers = get_enrolled_users(
-            $this->context,
-            'moodle/course:isincompletionreports',
-            $this->groupid ?: 0,
-            'u.*',
-            'u.lastname, u.firstname'
-        );
+        // User selector — scoped to the viewer's effective group membership.
+        if ($this->groupid > 0) {
+            $enrolledusers = get_enrolled_users(
+                $this->context,
+                'moodle/course:isincompletionreports',
+                $this->groupid,
+                'u.*',
+                'u.lastname, u.firstname'
+            );
+        } else if ($canviewallgroups) {
+            $enrolledusers = get_enrolled_users(
+                $this->context,
+                'moodle/course:isincompletionreports',
+                0,
+                'u.*',
+                'u.lastname, u.firstname'
+            );
+        } else {
+            $usergroups = groups_get_user_groups($this->courseid, $USER->id);
+            $mygroupids = $usergroups[0] ?? [];
+            $enrolledusers = [];
+            foreach ($mygroupids as $gid) {
+                $members = get_enrolled_users(
+                    $this->context,
+                    'moodle/course:isincompletionreports',
+                    $gid,
+                    'u.*',
+                    'u.lastname, u.firstname'
+                );
+                foreach ($members as $uid => $user) {
+                    if (!isset($enrolledusers[$uid])) {
+                        $enrolledusers[$uid] = $user;
+                    }
+                }
+            }
+        }
 
         $data->users = [];
         $data->users[] = [

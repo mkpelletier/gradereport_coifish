@@ -105,6 +105,170 @@ class report extends \grade_report {
     }
 
     /**
+     * Count the activities a student is reasonably expected to engage with in a course.
+     *
+     * Mirrors the engagement-metric activity set (assign, quiz, page, book, resource,
+     * url, folder) but subtracts assign/quiz items that the category's drop-lowest or
+     * keep-highest aggregation rule makes optional. Used by both the per-course COI
+     * report and the intervention snapshot so students aren't flagged as disengaged
+     * for skipping optional assessments.
+     *
+     * @param int $courseid Course ID.
+     * @return int Effective expected activity count.
+     */
+    public static function get_expected_activity_count(int $courseid): int {
+        global $DB;
+
+        $total = (int)$DB->count_records_sql(
+            "SELECT COUNT(cm.id)
+               FROM {course_modules} cm
+               JOIN {modules} m ON m.id = cm.module
+              WHERE cm.course = :cid AND cm.deletioninprogress = 0
+                AND m.name IN ('assign', 'quiz', 'page', 'book', 'resource', 'url', 'folder')",
+            ['cid' => $courseid]
+        );
+
+        $cats = $DB->get_records_select(
+            'grade_categories',
+            'courseid = :cid AND (droplow > 0 OR keephigh > 0)',
+            ['cid' => $courseid],
+            '',
+            'id, droplow, keephigh'
+        );
+        if (empty($cats)) {
+            return $total;
+        }
+
+        $catids = array_keys($cats);
+        [$insql, $inparams] = $DB->get_in_or_equal($catids, SQL_PARAMS_NAMED, 'cg');
+        $counts = $DB->get_records_sql(
+            "SELECT categoryid, COUNT(id) AS cnt
+               FROM {grade_items}
+              WHERE categoryid $insql AND itemmodule IN ('assign', 'quiz')
+           GROUP BY categoryid",
+            $inparams
+        );
+
+        $dropped = 0;
+        foreach ($cats as $cat) {
+            $cnt = isset($counts[$cat->id]) ? (int)$counts[$cat->id]->cnt : 0;
+            if ($cnt <= 0) {
+                continue;
+            }
+            if ((int)$cat->keephigh > 0) {
+                $dropped += max(0, $cnt - (int)$cat->keephigh);
+            } else if ((int)$cat->droplow > 0) {
+                $dropped += min($cnt, (int)$cat->droplow);
+            }
+        }
+
+        return max(0, $total - $dropped);
+    }
+
+    /**
+     * The effective "now" for analytics — clamped to the course end date when the
+     * course has already concluded.
+     *
+     * For a concluded course, time-based diagnostics (days inactive, weeks enrolled,
+     * sliding activity windows) should freeze at the course's official end date so
+     * a closed course doesn't keep "drifting" — e.g. a stale-activity card claiming
+     * a student has been absent for hundreds of days after the term has ended.
+     *
+     * @return int Unix timestamp.
+     */
+    public function effective_now(): int {
+        $now = time();
+        $enddate = (int)($this->course->enddate ?? 0);
+        if ($enddate > 0 && $enddate < $now) {
+            return $enddate;
+        }
+        return $now;
+    }
+
+    /**
+     * Return the group IDs the current viewer is scoped to for cohort-level queries.
+     *
+     * - If a specific group is selected (groupid > 0) and the viewer may see it, returns [groupid].
+     * - If groupid == 0 and the viewer has gradereport/coifish:viewallgroups, returns [] (no filter).
+     * - Otherwise returns the IDs of every group the viewer is a member of in this course.
+     *
+     * @return int[] Empty array means "no group filter" (all participants).
+     */
+    public function get_scoped_groupids(): array {
+        global $USER;
+
+        $canviewall = has_capability('gradereport/coifish:viewallgroups', $this->context);
+        $usergroups = groups_get_user_groups($this->courseid, $USER->id);
+        $mygroupids = array_values(array_map('intval', $usergroups[0] ?? []));
+
+        if ($this->groupid > 0) {
+            if ($canviewall || in_array((int)$this->groupid, $mygroupids, true)) {
+                return [(int)$this->groupid];
+            }
+            // Viewer asked for a group they may not see — fall back to their own groups.
+            return $mygroupids;
+        }
+
+        if ($canviewall) {
+            return [];
+        }
+
+        return $mygroupids;
+    }
+
+    /**
+     * Fetch enrolled users honoring the viewer's group scope.
+     *
+     * Wraps get_enrolled_users() so summary/insights queries automatically respect the
+     * gradereport/coifish:viewallgroups capability and "all my groups" semantics.
+     *
+     * @param string $userfields Fields clause forwarded to get_enrolled_users().
+     * @param string $sort Sort clause forwarded to get_enrolled_users().
+     * @return array Array of user records keyed by userid.
+     */
+    public function get_scoped_enrolled_users(string $userfields = 'u.*', string $sort = 'u.lastname, u.firstname'): array {
+        $scope = $this->get_scoped_groupids();
+
+        if (empty($scope)) {
+            return get_enrolled_users(
+                $this->context,
+                'moodle/course:isincompletionreports',
+                0,
+                $userfields,
+                $sort
+            );
+        }
+
+        if (count($scope) === 1) {
+            return get_enrolled_users(
+                $this->context,
+                'moodle/course:isincompletionreports',
+                $scope[0],
+                $userfields,
+                $sort
+            );
+        }
+
+        // Union of members across multiple groups.
+        $merged = [];
+        foreach ($scope as $gid) {
+            $members = get_enrolled_users(
+                $this->context,
+                'moodle/course:isincompletionreports',
+                $gid,
+                $userfields,
+                $sort
+            );
+            foreach ($members as $uid => $user) {
+                if (!isset($merged[$uid])) {
+                    $merged[$uid] = $user;
+                }
+            }
+        }
+        return $merged;
+    }
+
+    /**
      * Batch-load all grade records for the user to avoid per-item queries.
      */
     protected function load_user_grades(): void {
@@ -424,6 +588,8 @@ class report extends \grade_report {
         }
 
         $categorytotal = $this->get_category_total_data($catitem);
+        $droplow = (int)($gradecat->droplow ?? 0);
+        $keephigh = (int)($gradecat->keephigh ?? 0);
 
         return [
             'categoryname' => $gradecat->get_name(),
@@ -435,7 +601,90 @@ class report extends \grade_report {
             'subcategories' => $subcategories,
             'hassubcategories' => !empty($subcategories),
             'categorytotal' => $categorytotal,
+            'droplow' => $droplow,
+            'keephigh' => $keephigh,
+            'aggregation_label' => $this->build_aggregation_label($droplow, $keephigh),
+            'has_aggregation_label' => ($droplow > 0 || $keephigh > 0),
         ];
+    }
+
+    /**
+     * Build a short human-readable label for a category's drop/keep aggregation rule.
+     *
+     * Moodle stores these on grade_category; we surface them in the report so students
+     * understand why some grades may not contribute to the category total.
+     *
+     * @param int $droplow Number of lowest grades to drop.
+     * @param int $keephigh Number of highest grades to keep.
+     * @return string The label, or '' if neither rule is in effect.
+     */
+    protected function build_aggregation_label(int $droplow, int $keephigh): string {
+        if ($keephigh > 0) {
+            return get_string('aggregation_keephigh', 'gradereport_coifish', $keephigh);
+        }
+        if ($droplow > 0) {
+            return get_string('aggregation_droplow', 'gradereport_coifish', $droplow);
+        }
+        return '';
+    }
+
+    /**
+     * Apply the category's drop-lowest / keep-highest rule to a list of graded items.
+     *
+     * Mirrors Moodle's grade_category::apply_limit_rules(): items are ranked by their
+     * achieved percentage and either the lowest N are removed (droplow) or only the
+     * top N are retained (keephigh). Operates only on items that have been graded —
+     * ungraded items are passed through untouched so the caller can still decide how
+     * to treat them.
+     *
+     * @param array $items Items with at minimum 'graded', 'grade_raw', 'grademax_raw',
+     *                    'isextracredit'. Extra-credit items are never dropped.
+     * @param int $droplow Number of lowest grades to drop.
+     * @param int $keephigh Number of highest grades to keep.
+     * @return array Items with the dropped ones excluded (preserving original order).
+     */
+    protected function apply_drop_keep(array $items, int $droplow, int $keephigh): array {
+        if (($droplow <= 0 && $keephigh <= 0) || empty($items)) {
+            return $items;
+        }
+
+        // Partition: graded non-extra-credit items participate in ranking; others bypass.
+        $rankable = [];
+        $bypass = [];
+        foreach ($items as $idx => $item) {
+            $isgraded = !empty($item['graded']) && $item['grade_raw'] !== null && ($item['grademax_raw'] ?? 0) > 0;
+            $isextra = !empty($item['isextracredit']);
+            if ($isgraded && !$isextra) {
+                $rankable[$idx] = (float)$item['grade_raw'] / (float)$item['grademax_raw'];
+            } else {
+                $bypass[$idx] = true;
+            }
+        }
+
+        if (empty($rankable)) {
+            return $items;
+        }
+
+        // Sort by percentage descending — Moodle drops from the bottom, keeps from the top.
+        arsort($rankable);
+        $ranked = array_keys($rankable);
+
+        if ($keephigh > 0) {
+            $keepidx = array_slice($ranked, 0, $keephigh);
+        } else {
+            // Drop the lowest N: equivalent to keeping (count - N) from the top.
+            $keepcount = max(0, count($ranked) - $droplow);
+            $keepidx = array_slice($ranked, 0, $keepcount);
+        }
+        $keepset = array_fill_keys($keepidx, true);
+
+        $result = [];
+        foreach ($items as $idx => $item) {
+            if (isset($bypass[$idx]) || isset($keepset[$idx])) {
+                $result[] = $item;
+            }
+        }
+        return $result;
     }
 
     /**
@@ -918,25 +1167,38 @@ class report extends \grade_report {
      * @return float|null The category percentage (0–1) based on graded items, or null if none graded.
      */
     protected function calculate_category_running_total(array $cat): ?float {
-        $gradedweightsum = 0;
-        $weightedscoresum = 0;
+        $droplow = (int)($cat['droplow'] ?? 0);
+        $keephigh = (int)($cat['keephigh'] ?? 0);
 
-        // Process direct items.
+        // Gather direct graded items (skipping hidden ones from the user's view).
+        $eligibleitems = [];
         if (!empty($cat['items'])) {
             foreach ($cat['items'] as $item) {
-                if (!$item['graded'] || $item['isextracredit'] || $item['ishidden']) {
+                if (!$item['graded'] || $item['ishidden']) {
                     continue;
                 }
-                $weight = $item['weight_raw'];
-                if ($weight <= 0 || $item['grademax_raw'] <= 0) {
+                if (($item['weight_raw'] ?? 0) <= 0 || ($item['grademax_raw'] ?? 0) <= 0) {
                     continue;
                 }
-                $gradedweightsum += $weight;
-                $weightedscoresum += $weight * ($item['grade_raw'] / $item['grademax_raw']);
+                $eligibleitems[] = $item;
             }
         }
 
-        // Recurse into subcategories.
+        // Apply drop/keep on the category's direct items.
+        $keptitems = $this->apply_drop_keep($eligibleitems, $droplow, $keephigh);
+
+        $gradedweightsum = 0;
+        $weightedscoresum = 0;
+        foreach ($keptitems as $item) {
+            $weight = (float)$item['weight_raw'];
+            $gradedweightsum += $weight;
+            $weightedscoresum += $weight * ($item['grade_raw'] / $item['grademax_raw']);
+        }
+
+        // Recurse into subcategories — these are not subject to the parent's drop/keep
+        // because Moodle applies drop/keep only across the direct children of a category;
+        // a subcategory total participates as one item, but our reporting uses the
+        // subcategory's own aggregated percentage rather than dropping it.
         if (!empty($cat['subcategories'])) {
             foreach ($cat['subcategories'] as $subcat) {
                 $subresult = $this->calculate_category_running_total($subcat);
@@ -1076,39 +1338,73 @@ class report extends \grade_report {
      * @return array Bar data with segments for each item.
      */
     protected function build_category_bar(array $cat): array {
+        $droplow = (int)($cat['droplow'] ?? 0);
+        $keephigh = (int)($cat['keephigh'] ?? 0);
+
         $totalgraded = 0;
         $totalitems = 0;
+
+        // The ring reports against the EFFECTIVE expected work — the count the
+        // student is required to complete after drop/keep is applied. The graded
+        // count is capped at the expected count so "5 of 3" never appears when
+        // a student has graded more than the rule keeps.
+        $directeligible = array_values(array_filter($cat['items'] ?? [], static function ($item) {
+            return empty($item['isextracredit']) && empty($item['ishidden']);
+        }));
+        $directexpected = count($directeligible);
+        if ($keephigh > 0) {
+            $directexpected = min($directexpected, $keephigh);
+        } else if ($droplow > 0) {
+            $directexpected = max(0, $directexpected - $droplow);
+        }
+        $directgraded = 0;
+        foreach ($directeligible as $item) {
+            if ($item['graded'] && $item['grade_raw'] !== null) {
+                $directgraded++;
+            }
+        }
+        $totalitems += $directexpected;
+        $totalgraded += min($directgraded, $directexpected);
+
+        // Compute subcategory bars once; reuse counts AND percentages below.
+        $subbars = [];
+        foreach ($cat['subcategories'] ?? [] as $subcat) {
+            $subbar = $this->build_category_bar($subcat);
+            $subbars[] = ['bar' => $subbar, 'weight' => (float)($subcat['categoryweight_raw'] ?? 0)];
+            $totalitems += (int)$subbar['total_count'];
+            $totalgraded += (int)$subbar['graded_count'];
+        }
+
+        // For the bar percentage, apply drop/keep on the category's direct items so
+        // a "best N of M" category does not look 0% while later attempts are pending.
+        // Ungraded items still count as 0% in the projected total of the *kept* set —
+        // matching how Moodle aggregates the category once everything is in.
+        $directitems = array_filter($cat['items'] ?? [], static function ($item) {
+            return empty($item['isextracredit']) && empty($item['ishidden'])
+                && ($item['weight_raw'] ?? 0) > 0 && ($item['grademax_raw'] ?? 0) > 0;
+        });
+        $keptdirect = $this->apply_drop_keep_projected($directitems, $droplow, $keephigh);
+
         $weightedscoreall = 0;
         $totalweightall = 0;
-        $items = $cat['items'] ?? [];
-
-        // Flatten subcategory items into this bar.
-        if (!empty($cat['subcategories'])) {
-            $items = array_merge($items, $this->flatten_subcategory_items($cat['subcategories']));
-        }
-
-        foreach ($items as $item) {
-            if ($item['isextracredit'] || $item['ishidden']) {
-                continue;
-            }
-            $totalitems++;
-            $weight = $item['weight_raw'] ?? 0;
-            if ($weight > 0 && $item['grademax_raw'] > 0) {
-                $totalweightall += $weight;
-                if ($item['graded'] && $item['grade_raw'] !== null) {
-                    $totalgraded++;
-                    $weightedscoreall += $weight * ($item['grade_raw'] / $item['grademax_raw']);
-                }
-                // Ungraded items contribute 0 to the numerator but their weight is still counted.
+        foreach ($keptdirect as $item) {
+            $weight = (float)$item['weight_raw'];
+            $totalweightall += $weight;
+            if (!empty($item['graded']) && $item['grade_raw'] !== null) {
+                $weightedscoreall += $weight * ((float)$item['grade_raw'] / (float)$item['grademax_raw']);
             }
         }
-
-        // Category percentage: weighted average where ungraded items count as 0%.
+        foreach ($subbars as $entry) {
+            if ($entry['weight'] > 0) {
+                $totalweightall += $entry['weight'];
+                $weightedscoreall += $entry['weight'] * ($entry['bar']['percentage'] / 100);
+            }
+        }
         $catpercent = ($totalweightall > 0)
             ? round(($weightedscoreall / $totalweightall) * 100, 1)
             : 0;
 
-        // Running total: percentage based on graded items only.
+        // Running total: percentage based on graded items only, also honoring drop/keep.
         $runningresult = $this->calculate_category_running_total($cat);
         $runningpercent = ($runningresult !== null) ? round($runningresult * 100, 1) : $catpercent;
 
@@ -1119,7 +1415,60 @@ class report extends \grade_report {
             'running_percentage' => $runningpercent,
             'graded_count' => $totalgraded,
             'total_count' => $totalitems,
+            'aggregation_label' => $cat['aggregation_label'] ?? '',
+            'has_aggregation_label' => !empty($cat['has_aggregation_label']),
         ];
+    }
+
+    /**
+     * Apply drop/keep using a projected ranking that treats ungraded items as 0%.
+     *
+     * Useful for the "current" view (where missed work counts as zero) so the bar
+     * shows the category total as if drop/keep were applied at the current moment.
+     *
+     * @param array $items Items with grade_raw/grademax_raw/graded/isextracredit.
+     * @param int $droplow Number of lowest grades to drop.
+     * @param int $keephigh Number of highest grades to keep.
+     * @return array Items remaining after drop/keep.
+     */
+    protected function apply_drop_keep_projected(array $items, int $droplow, int $keephigh, float $ungradedpct = 0.0): array {
+        if (($droplow <= 0 && $keephigh <= 0) || empty($items)) {
+            return $items;
+        }
+
+        $rankable = [];
+        $bypass = [];
+        foreach ($items as $idx => $item) {
+            if (!empty($item['isextracredit'])) {
+                $bypass[$idx] = true;
+                continue;
+            }
+            $gmax = (float)($item['grademax_raw'] ?? 0);
+            $pct = (!empty($item['graded']) && $item['grade_raw'] !== null && $gmax > 0)
+                ? (float)$item['grade_raw'] / $gmax
+                : $ungradedpct;
+            $rankable[$idx] = $pct;
+        }
+        if (empty($rankable)) {
+            return $items;
+        }
+
+        arsort($rankable);
+        $ranked = array_keys($rankable);
+        if ($keephigh > 0) {
+            $keepidx = array_slice($ranked, 0, $keephigh);
+        } else {
+            $keepidx = array_slice($ranked, 0, max(0, count($ranked) - $droplow));
+        }
+        $keepset = array_fill_keys($keepidx, true);
+
+        $result = [];
+        foreach ($items as $idx => $item) {
+            if (isset($bypass[$idx]) || isset($keepset[$idx])) {
+                $result[] = $item;
+            }
+        }
+        return $result;
     }
 
     /**
@@ -1152,40 +1501,15 @@ class report extends \grade_report {
 
         foreach ($this->gradedata as $cat) {
             if (!empty($cat['iscoursecategory'])) {
+                $catpercent = $this->calculate_category_projection($cat, 1.0);
+                $catweight = $cat['categoryweight_raw'] ?? 1.0;
+                $totalweight += $catweight;
+                $totalweightedachieved += $catweight * $catpercent;
                 continue;
             }
             $catweight = $cat['categoryweight_raw'] ?? 1.0;
             $totalweight += $catweight;
-
-            $items = $cat['items'] ?? [];
-            if (!empty($cat['subcategories'])) {
-                $items = array_merge($items, $this->flatten_subcategory_items($cat['subcategories']));
-            }
-
-            $itemweightsum = 0;
-            $weightedscoresum = 0;
-            foreach ($items as $item) {
-                if ($item['isextracredit'] || $item['ishidden']) {
-                    continue;
-                }
-                $weight = $item['weight_raw'];
-                if ($weight <= 0 || $item['grademax_raw'] <= 0) {
-                    continue;
-                }
-                $itemweightsum += $weight;
-                if ($item['graded'] && $item['grade_raw'] !== null) {
-                    $weightedscoresum += $weight * ($item['grade_raw'] / $item['grademax_raw']);
-                } else {
-                    // Assume 100% on ungraded items.
-                    $weightedscoresum += $weight * 1.0;
-                }
-            }
-
-            if ($itemweightsum > 0) {
-                $totalweightedachieved += $catweight * ($weightedscoresum / $itemweightsum);
-            } else {
-                $totalweightedachieved += $catweight;
-            }
+            $totalweightedachieved += $catweight * $this->calculate_category_projection($cat, 1.0);
         }
 
         if ($totalweight <= 0) {
@@ -1193,6 +1517,59 @@ class report extends \grade_report {
         }
 
         return round(($totalweightedachieved / $totalweight) * 100, 1);
+    }
+
+    /**
+     * Project a category's percentage assuming ungraded items score $projection (0–1).
+     *
+     * Applies the category's drop/keep rule using the projected ranking so the
+     * computation matches Moodle's aggregation behavior. Recurses into subcategories.
+     *
+     * @param array $cat The category data structure.
+     * @param float $projection Percentage (0–1) to assume for ungraded items.
+     * @return float Category percentage (0–1).
+     */
+    protected function calculate_category_projection(array $cat, float $projection): float {
+        $droplow = (int)($cat['droplow'] ?? 0);
+        $keephigh = (int)($cat['keephigh'] ?? 0);
+
+        $eligibleitems = [];
+        foreach ($cat['items'] ?? [] as $item) {
+            if (!empty($item['isextracredit']) || !empty($item['ishidden'])) {
+                continue;
+            }
+            if (($item['weight_raw'] ?? 0) <= 0 || ($item['grademax_raw'] ?? 0) <= 0) {
+                continue;
+            }
+            $eligibleitems[] = $item;
+        }
+
+        $keptitems = $this->apply_drop_keep_projected($eligibleitems, $droplow, $keephigh, $projection);
+
+        $weightsum = 0;
+        $weightedscore = 0;
+        foreach ($keptitems as $item) {
+            $weight = (float)$item['weight_raw'];
+            $weightsum += $weight;
+            if (!empty($item['graded']) && $item['grade_raw'] !== null) {
+                $weightedscore += $weight * ((float)$item['grade_raw'] / (float)$item['grademax_raw']);
+            } else {
+                $weightedscore += $weight * $projection;
+            }
+        }
+
+        if (!empty($cat['subcategories'])) {
+            foreach ($cat['subcategories'] as $subcat) {
+                $subweight = (float)($subcat['categoryweight_raw'] ?? 0);
+                if ($subweight <= 0) {
+                    continue;
+                }
+                $weightsum += $subweight;
+                $weightedscore += $subweight * $this->calculate_category_projection($subcat, $projection);
+            }
+        }
+
+        return $weightsum > 0 ? ($weightedscore / $weightsum) : $projection;
     }
 
     /**
@@ -1206,60 +1583,17 @@ class report extends \grade_report {
      * @return array Goal targets, each with label, value, required, achievable, and already_met.
      */
     protected function calculate_goal_targets(array $thresholds, float $bestpossible): array {
-        // First pass: collect graded contribution and ungraded weight per category.
-        $totalweight = 0;
-        $gradedcontribution = 0;
-        $ungradedweight = 0;
+        // Current (everything ungraded counted as 0%) and best-possible (100%) anchor
+        // the search space. Drop/keep makes the relationship between ungraded x and
+        // total non-linear, so we solve numerically.
+        $currentpercent = $this->project_overall_percent(0.0);
+        $hasungraded = $this->has_ungraded_items();
 
-        foreach ($this->gradedata as $cat) {
-            if (!empty($cat['iscoursecategory'])) {
-                continue;
-            }
-            $catweight = $cat['categoryweight_raw'] ?? 1.0;
-            $totalweight += $catweight;
-
-            $items = $cat['items'] ?? [];
-            if (!empty($cat['subcategories'])) {
-                $items = array_merge($items, $this->flatten_subcategory_items($cat['subcategories']));
-            }
-
-            $itemweightsum = 0;
-            $gradedscoresum = 0;
-            $ungradedweightsum = 0;
-            foreach ($items as $item) {
-                if ($item['isextracredit'] || $item['ishidden']) {
-                    continue;
-                }
-                $weight = $item['weight_raw'];
-                if ($weight <= 0 || $item['grademax_raw'] <= 0) {
-                    continue;
-                }
-                $itemweightsum += $weight;
-                if ($item['graded'] && $item['grade_raw'] !== null) {
-                    $gradedscoresum += $weight * ($item['grade_raw'] / $item['grademax_raw']);
-                } else {
-                    $ungradedweightsum += $weight;
-                }
-            }
-
-            if ($itemweightsum > 0) {
-                $gradedcontribution += $catweight * ($gradedscoresum / $itemweightsum);
-                $ungradedweight += $catweight * ($ungradedweightsum / $itemweightsum);
-            }
-        }
-
-        if ($totalweight <= 0) {
-            return [];
-        }
-
-        // For each threshold, solve: (gradedcontribution + ungradedweight * x) / totalweight * 100 = target.
         $goals = [];
         foreach ($thresholds as $threshold) {
             $target = (float)$threshold['value'];
-            $currentpercent = ($gradedcontribution / $totalweight) * 100;
 
             if ($currentpercent >= $target) {
-                // Already met this threshold.
                 $goals[] = [
                     'label' => $threshold['label'],
                     'value' => $threshold['value'],
@@ -1270,8 +1604,7 @@ class report extends \grade_report {
                 continue;
             }
 
-            if ($ungradedweight <= 0) {
-                // No remaining items — cannot improve.
+            if (!$hasungraded || $bestpossible < $target) {
                 $goals[] = [
                     'label' => $threshold['label'],
                     'value' => $threshold['value'],
@@ -1282,20 +1615,89 @@ class report extends \grade_report {
                 continue;
             }
 
-            $requiredx = (($target / 100) * $totalweight - $gradedcontribution) / $ungradedweight;
-            $requiredpercent = round($requiredx * 100, 1);
-            $achievable = $bestpossible >= $target;
+            // Bisect on x ∈ [0, 1] to find minimum ungraded percentage that hits the target.
+            $lo = 0.0;
+            $hi = 1.0;
+            for ($i = 0; $i < 24; $i++) {
+                $mid = ($lo + $hi) / 2;
+                if ($this->project_overall_percent($mid) >= $target) {
+                    $hi = $mid;
+                } else {
+                    $lo = $mid;
+                }
+            }
+            $requiredpercent = round($hi * 100, 1);
 
             $goals[] = [
                 'label' => $threshold['label'],
                 'value' => $threshold['value'],
                 'required' => min($requiredpercent, 100),
-                'achievable' => $achievable,
+                'achievable' => true,
                 'already_met' => false,
             ];
         }
 
         return $goals;
+    }
+
+    /**
+     * Project the overall course percentage assuming ungraded items score $x (0–1).
+     *
+     * @param float $x Percentage assumed for ungraded items.
+     * @return float Course percentage (0–100).
+     */
+    protected function project_overall_percent(float $x): float {
+        $totalweight = 0;
+        $totalcontribution = 0;
+        foreach ($this->gradedata as $cat) {
+            $catweight = (float)($cat['categoryweight_raw'] ?? 1.0);
+            $totalweight += $catweight;
+            $totalcontribution += $catweight * $this->calculate_category_projection($cat, $x);
+        }
+        if ($totalweight <= 0) {
+            return $x * 100;
+        }
+        return ($totalcontribution / $totalweight) * 100;
+    }
+
+    /**
+     * Return true if any visible item in any category is still ungraded.
+     *
+     * @return bool
+     */
+    protected function has_ungraded_items(): bool {
+        foreach ($this->gradedata as $cat) {
+            if ($this->category_has_ungraded($cat)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Recursively check a category for any ungraded eligible items.
+     *
+     * @param array $cat Category data.
+     * @return bool
+     */
+    protected function category_has_ungraded(array $cat): bool {
+        foreach ($cat['items'] ?? [] as $item) {
+            if (!empty($item['isextracredit']) || !empty($item['ishidden'])) {
+                continue;
+            }
+            if (($item['weight_raw'] ?? 0) <= 0 || ($item['grademax_raw'] ?? 0) <= 0) {
+                continue;
+            }
+            if (empty($item['graded']) || $item['grade_raw'] === null) {
+                return true;
+            }
+        }
+        foreach ($cat['subcategories'] ?? [] as $subcat) {
+            if ($this->category_has_ungraded($subcat)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1473,34 +1875,57 @@ class report extends \grade_report {
     protected function get_student_item_scores(): array {
         $scores = [];
         foreach ($this->gradedata as $cat) {
-            $items = $cat['items'] ?? [];
-            if (!empty($cat['subcategories'])) {
-                $items = array_merge($items, $this->flatten_subcategory_items($cat['subcategories']));
-            }
-            foreach ($items as $item) {
-                if ($item['isextracredit'] || $item['ishidden']) {
-                    continue;
-                }
-                if (!$item['graded'] || $item['grade_raw'] === null || $item['grademax_raw'] <= 0) {
-                    continue;
-                }
-                $itemid = $item['itemid'];
-                $time = 0;
-                if (isset($this->usergrades[$itemid])) {
-                    $time = (int)($this->usergrades[$itemid]->timemodified ?? 0);
-                }
-                $scores[] = [
-                    'name' => $item['itemname'],
-                    'percent' => round(($item['grade_raw'] / $item['grademax_raw']) * 100, 1),
-                    'time' => $time,
-                ];
-            }
+            $this->collect_category_scores($cat, $scores);
         }
         // Sort by time graded.
         usort($scores, function ($a, $b) {
             return $a['time'] <=> $b['time'];
         });
         return $scores;
+    }
+
+    /**
+     * Append the kept (non-dropped) graded item scores from a category and its sub-categories.
+     *
+     * Items that would be removed by the category's drop-lowest / keep-highest rule are
+     * excluded so diagnostics like the pass-streak don't penalise optional work the
+     * student legitimately skipped.
+     *
+     * @param array $cat Category data structure.
+     * @param array &$scores Score accumulator.
+     */
+    protected function collect_category_scores(array $cat, array &$scores): void {
+        $droplow = (int)($cat['droplow'] ?? 0);
+        $keephigh = (int)($cat['keephigh'] ?? 0);
+
+        $eligible = [];
+        foreach ($cat['items'] ?? [] as $item) {
+            if (!empty($item['isextracredit']) || !empty($item['ishidden'])) {
+                continue;
+            }
+            if (empty($item['graded']) || $item['grade_raw'] === null || ($item['grademax_raw'] ?? 0) <= 0) {
+                continue;
+            }
+            $eligible[] = $item;
+        }
+        $kept = $this->apply_drop_keep($eligible, $droplow, $keephigh);
+
+        foreach ($kept as $item) {
+            $itemid = $item['itemid'];
+            $time = 0;
+            if (isset($this->usergrades[$itemid])) {
+                $time = (int)($this->usergrades[$itemid]->timemodified ?? 0);
+            }
+            $scores[] = [
+                'name' => $item['itemname'],
+                'percent' => round(($item['grade_raw'] / $item['grademax_raw']) * 100, 1),
+                'time' => $time,
+            ];
+        }
+
+        foreach ($cat['subcategories'] ?? [] as $subcat) {
+            $this->collect_category_scores($subcat, $scores);
+        }
     }
 
     /**
@@ -2158,7 +2583,7 @@ class report extends \grade_report {
         // Get course start date for calculating weeks enrolled.
         $course = get_course($this->courseid);
         $coursestart = (int)$course->startdate;
-        $now = time();
+        $now = $this->effective_now();
         $weeksenrolled = max(1, ceil(($now - $coursestart) / (7 * 86400)));
 
         // Need at least 2 weeks of enrolment for meaningful data.
@@ -2834,7 +3259,7 @@ class report extends \grade_report {
               WHERE fd.course = :courseid AND fp.userid = :userid",
             ['courseid' => $this->courseid, 'userid' => $userid]
         );
-        $daysinactive = $lastactive ? round((time() - (int)$lastactive) / 86400) : null;
+        $daysinactive = $lastactive ? round(($this->effective_now() - (int)$lastactive) / 86400) : null;
         $isstale = ($total > 0 && $daysinactive !== null && $daysinactive >= $this->get_stale_days());
 
         $isrisk = ($level['level'] <= 1) || $isstale;
@@ -3004,7 +3429,7 @@ class report extends \grade_report {
                 AND fp.parent != 0",
             ['courseid' => $this->courseid, 'userid' => $userid, 'userid2' => $userid]
         );
-        $daysinactive = $lastactive ? round((time() - (int)$lastactive) / 86400) : null;
+        $daysinactive = $lastactive ? round(($this->effective_now() - (int)$lastactive) / 86400) : null;
         $isstale = ($total > 0 && $daysinactive !== null && $daysinactive >= $this->get_stale_days());
 
         $isrisk = ($level['level'] <= 1) || $isstale;
@@ -3139,7 +3564,7 @@ class report extends \grade_report {
             ['courseid' => $this->courseid, 'userid' => $userid]
         );
         $lastactive = max((int)$lastsubmission, (int)$lastquiz);
-        $daysinactive = $lastactive > 0 ? round((time() - $lastactive) / 86400) : null;
+        $daysinactive = $lastactive > 0 ? round(($this->effective_now() - $lastactive) / 86400) : null;
         $isstale = ($total > 0 && $daysinactive !== null && $daysinactive >= $this->get_stale_days());
 
         $isrisk = ($level['level'] <= 1) || $isstale;
@@ -4268,14 +4693,7 @@ class report extends \grade_report {
     public function get_summary_data(): array {
         global $DB;
 
-        $context = $this->context;
-        $enrolledusers = get_enrolled_users(
-            $context,
-            'moodle/course:isincompletionreports',
-            $this->groupid ?: 0,
-            'u.*',
-            'u.lastname, u.firstname'
-        );
+        $enrolledusers = $this->get_scoped_enrolled_users();
 
         // Get all course total grades in one query.
         $courseitemid = $this->courseitem->id;
@@ -4342,24 +4760,19 @@ class report extends \grade_report {
             return [];
         }
 
-        // Get all grade items for this course (excluding the course total itself).
-        $items = $DB->get_records_select(
-            'grade_items',
-            'courseid = :courseid AND itemtype != :type',
-            ['courseid' => $this->courseid, 'type' => 'course'],
-            '',
-            'id, itemtype, grademax, aggregationcoef, aggregationcoef2, categoryid'
-        );
-
-        if (empty($items)) {
+        // Build the category tree once with drop/keep metadata and item weights.
+        $tree = $this->build_bulk_category_tree();
+        if ($tree === null) {
             return array_fill_keys($userids, null);
         }
 
-        $itemids = array_keys($items);
+        // Load all relevant grades in one query.
+        $itemids = $this->collect_tree_item_ids($tree);
+        if (empty($itemids)) {
+            return array_fill_keys($userids, null);
+        }
         [$insqlitems, $inparamsitems] = $DB->get_in_or_equal($itemids, SQL_PARAMS_NAMED, 'gi');
         [$insqlusers, $inparamsusers] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'gu');
-
-        // Get all grades for these items and users in one query.
         $allgrades = $DB->get_records_sql(
             "SELECT id, userid, itemid, finalgrade
                FROM {grade_grades}
@@ -4367,39 +4780,242 @@ class report extends \grade_report {
             array_merge($inparamsitems, $inparamsusers)
         );
 
-        // Group grades by user.
         $usergrades = [];
         foreach ($allgrades as $gg) {
             $usergrades[$gg->userid][$gg->itemid] = $gg->finalgrade;
         }
 
-        // Calculate running average for each student.
         $result = [];
         foreach ($userids as $uid) {
-            $gradedweightsum = 0;
-            $weightedscoresum = 0;
-            $mygrades = $usergrades[$uid] ?? [];
+            $pct = $this->bulk_category_percent($tree, $usergrades[$uid] ?? []);
+            $result[$uid] = $pct === null ? null : round($pct * 100, 1);
+        }
+        return $result;
+    }
 
-            foreach ($items as $item) {
-                $fg = $mygrades[$item->id] ?? null;
-                if ($fg === null || (float)$item->grademax <= 0) {
-                    continue;
-                }
-                // Use aggregationcoef2 (natural weighting) if available, else grademax as weight proxy.
-                $weight = (float)$item->aggregationcoef2 > 0
-                    ? (float)$item->aggregationcoef2
-                    : (float)$item->grademax;
-                $gradedweightsum += $weight;
-                $weightedscoresum += $weight * ((float)$fg / (float)$item->grademax);
+    /**
+     * Build a lightweight category tree for the bulk running-average calculation.
+     *
+     * Each node carries droplow, keephigh, its own category weight (in its parent),
+     * the list of direct grade items with their natural weights, and child categories.
+     *
+     * @return array|null Root node, or null if the course has no grade categories.
+     */
+    protected function build_bulk_category_tree(): ?array {
+        global $DB;
+
+        $categories = $DB->get_records(
+            'grade_categories',
+            ['courseid' => $this->courseid],
+            'depth ASC, id ASC',
+            'id, parent, depth, aggregation, droplow, keephigh'
+        );
+        if (empty($categories)) {
+            return null;
+        }
+
+        // Find the root (course) category — the one with null parent.
+        $root = null;
+        foreach ($categories as $cat) {
+            if ($cat->parent === null) {
+                $root = $cat;
+                break;
             }
+        }
+        if ($root === null) {
+            return null;
+        }
 
-            if ($gradedweightsum > 0) {
-                $result[$uid] = round(($weightedscoresum / $gradedweightsum) * 100, 1);
-            } else {
-                $result[$uid] = null;
+        // Category weights live on the corresponding category-total grade_item.
+        $catweights = [];
+        $catitems = $DB->get_records_select(
+            'grade_items',
+            'courseid = :courseid AND itemtype = :tcategory',
+            ['courseid' => $this->courseid, 'tcategory' => 'category'],
+            '',
+            'id, iteminstance, aggregationcoef2, grademax'
+        );
+        foreach ($catitems as $ci) {
+            $catweights[(int)$ci->iteminstance] = (float)$ci->aggregationcoef2 > 0
+                ? (float)$ci->aggregationcoef2
+                : (float)$ci->grademax;
+        }
+
+        // Load all grade items for the course (non-course, non-category-total).
+        $items = $DB->get_records_select(
+            'grade_items',
+            'courseid = :courseid AND itemtype NOT IN (:tcourse, :tcategory)',
+            ['courseid' => $this->courseid, 'tcourse' => 'course', 'tcategory' => 'category'],
+            '',
+            'id, grademax, aggregationcoef, aggregationcoef2, categoryid, hidden'
+        );
+
+        // Bucket items by parent category.
+        $itemsbycat = [];
+        foreach ($items as $item) {
+            if ((float)$item->grademax <= 0) {
+                continue;
+            }
+            if (!$this->canviewhidden && !empty($item->hidden)) {
+                continue;
+            }
+            $weight = (float)$item->aggregationcoef2 > 0
+                ? (float)$item->aggregationcoef2
+                : (float)$item->grademax;
+            if ($weight <= 0) {
+                continue;
+            }
+            $itemsbycat[(int)$item->categoryid][] = [
+                'id' => (int)$item->id,
+                'grademax' => (float)$item->grademax,
+                'weight' => $weight,
+                'isextracredit' => ((int)$item->aggregationcoef !== 0),
+            ];
+        }
+
+        // Recursively build the tree from the root.
+        return $this->build_bulk_category_node($root, $categories, $itemsbycat, $catweights);
+    }
+
+    /**
+     * Build a single tree node for the bulk computation.
+     *
+     * @param object $cat The category record.
+     * @param array $categories All categories indexed by id.
+     * @param array $itemsbycat Items grouped by categoryid.
+     * @param array $catweights Map of category id => weight (from the category-total grade item).
+     * @return array Node with id, droplow, keephigh, weight, items, children.
+     */
+    protected function build_bulk_category_node(
+        object $cat,
+        array $categories,
+        array $itemsbycat,
+        array $catweights
+    ): array {
+        $children = [];
+        foreach ($categories as $other) {
+            if ((int)$other->parent === (int)$cat->id) {
+                $children[] = $this->build_bulk_category_node($other, $categories, $itemsbycat, $catweights);
             }
         }
 
+        $items = $itemsbycat[(int)$cat->id] ?? [];
+
+        return [
+            'id' => (int)$cat->id,
+            'droplow' => (int)$cat->droplow,
+            'keephigh' => (int)$cat->keephigh,
+            'weight' => $catweights[(int)$cat->id] ?? 1.0,
+            'items' => $items,
+            'children' => $children,
+        ];
+    }
+
+    /**
+     * Collect every grade item ID referenced by the tree.
+     *
+     * @param array $node Tree node.
+     * @return int[]
+     */
+    protected function collect_tree_item_ids(array $node): array {
+        $ids = [];
+        foreach ($node['items'] as $item) {
+            $ids[] = $item['id'];
+        }
+        foreach ($node['children'] as $child) {
+            foreach ($this->collect_tree_item_ids($child) as $id) {
+                $ids[] = $id;
+            }
+        }
+        return $ids;
+    }
+
+    /**
+     * Compute a category's running percentage for one user, honoring drop/keep.
+     *
+     * Returns null if the user has no graded item anywhere in the subtree.
+     *
+     * @param array $node Tree node.
+     * @param array $usergrades itemid => finalgrade.
+     * @return float|null Percentage in 0..1.
+     */
+    protected function bulk_category_percent(array $node, array $usergrades): ?float {
+        // Partition direct items into graded vs ungraded (we only count graded for running).
+        $gradeditems = [];
+        $extra = [];
+        foreach ($node['items'] as $item) {
+            $fg = $usergrades[$item['id']] ?? null;
+            if ($fg === null) {
+                continue;
+            }
+            $entry = [
+                'weight' => $item['weight'],
+                'pct' => (float)$fg / $item['grademax'],
+                'isextracredit' => $item['isextracredit'],
+            ];
+            if ($item['isextracredit']) {
+                $extra[] = $entry;
+            } else {
+                $gradeditems[] = $entry;
+            }
+        }
+
+        $kept = $this->apply_drop_keep_simple($gradeditems, $node['droplow'], $node['keephigh']);
+        // Extra-credit items always pass through.
+        $kept = array_merge($kept, $extra);
+
+        $weightsum = 0;
+        $weightedscore = 0;
+        foreach ($kept as $entry) {
+            $weightsum += $entry['weight'];
+            $weightedscore += $entry['weight'] * $entry['pct'];
+        }
+
+        foreach ($node['children'] as $child) {
+            $subpct = $this->bulk_category_percent($child, $usergrades);
+            if ($subpct !== null) {
+                $subweight = $child['weight'];
+                $weightsum += $subweight;
+                $weightedscore += $subweight * $subpct;
+            }
+        }
+
+        if ($weightsum <= 0) {
+            return null;
+        }
+        return $weightedscore / $weightsum;
+    }
+
+    /**
+     * Simple drop/keep helper for the bulk tree (entries with weight + pct).
+     *
+     * @param array $entries Each: ['weight' => float, 'pct' => float, 'isextracredit' => bool].
+     * @param int $droplow Number of lowest grades to drop.
+     * @param int $keephigh Number of highest grades to keep.
+     * @return array Surviving entries.
+     */
+    protected function apply_drop_keep_simple(array $entries, int $droplow, int $keephigh): array {
+        if (($droplow <= 0 && $keephigh <= 0) || empty($entries)) {
+            return $entries;
+        }
+        $rankable = [];
+        foreach ($entries as $idx => $entry) {
+            $rankable[$idx] = $entry['pct'];
+        }
+        arsort($rankable);
+        $ranked = array_keys($rankable);
+        if ($keephigh > 0) {
+            $keepidx = array_slice($ranked, 0, $keephigh);
+        } else {
+            $keepidx = array_slice($ranked, 0, max(0, count($ranked) - $droplow));
+        }
+        $keepset = array_fill_keys($keepidx, true);
+        $result = [];
+        foreach ($entries as $idx => $entry) {
+            if (isset($keepset[$idx])) {
+                $result[] = $entry;
+            }
+        }
         return $result;
     }
 
@@ -4427,13 +5043,7 @@ class report extends \grade_report {
         $triggers = $this->get_diagnostic_triggers();
 
         // Get the cohort — same filtering as get_summary_data().
-        $enrolledusers = get_enrolled_users(
-            $this->context,
-            'moodle/course:isincompletionreports',
-            $this->groupid ?: 0,
-            'u.*',
-            'u.lastname, u.firstname'
-        );
+        $enrolledusers = $this->get_scoped_enrolled_users();
         $userids = array_keys($enrolledusers);
         if (empty($userids)) {
             return ['hasdata' => false];
@@ -4612,7 +5222,7 @@ class report extends \grade_report {
                 AND l.timecreated > :mintime
            GROUP BY l.userid",
             array_merge(
-                ['courseid' => $this->courseid, 'mintime' => time() - 365 * 86400],
+                ['courseid' => $this->courseid, 'mintime' => $this->effective_now() - 365 * 86400],
                 $inparamscollab
             )
         );
@@ -4670,14 +5280,10 @@ class report extends \grade_report {
         );
 
         // Cognitive Presence: engagement rate per student.
-        $totalactivities = (int)$DB->count_records_sql(
-            "SELECT COUNT(cm.id)
-               FROM {course_modules} cm
-               JOIN {modules} m ON m.id = cm.module
-              WHERE cm.course = :courseid AND cm.deletioninprogress = 0
-                AND m.name IN ('assign', 'quiz', 'page', 'book', 'resource', 'url', 'folder')",
-            ['courseid' => $this->courseid]
-        );
+        // Excludes assignments/quizzes that the category's drop-lowest or
+        // keep-highest rule makes optional so students aren't flagged as
+        // disengaged for skipping work they aren't expected to complete.
+        $totalactivities = self::get_expected_activity_count($this->courseid);
 
         // Each UNION branch needs its own IN clause with unique param names.
         [$insql2, $inparams2] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'q');
@@ -4910,9 +5516,10 @@ class report extends \grade_report {
 
             // Social stale check.
             $lastpost = isset($lastposts[$uid]) ? (int)$lastposts[$uid]->lastpost : 0;
-            $isstale = ($threads > 0 && $lastpost > 0 && (time() - $lastpost) >= $staledays * 86400);
+            $effectivenow = $this->effective_now();
+            $isstale = ($threads > 0 && $lastpost > 0 && ($effectivenow - $lastpost) >= $staledays * 86400);
             if ($isstale) {
-                $daysinactive = round((time() - $lastpost) / 86400);
+                $daysinactive = round(($effectivenow - $lastpost) / 86400);
                 $stale[] = [
                     'userid' => $uid,
                     'fullname' => fullname($enrolledusers[$uid]),
@@ -5494,7 +6101,7 @@ class report extends \grade_report {
            GROUP BY l.component",
             array_merge($inparamsab, [
                 'courseid' => $this->courseid,
-                'starttime' => time() - 30 * 86400, // Last 30 days.
+                'starttime' => $this->effective_now() - 30 * 86400, // Last 30 days (or pre-end-date window).
             ])
         );
 
@@ -5728,14 +6335,16 @@ class report extends \grade_report {
         $spthresholds = $this->get_coi_thresholds('sp', [1, 20, 50, 80]);
         $course = get_course($this->courseid);
 
-        // Scope to the current teacher's groups (if they belong to any).
+        // Scope to the viewer's allowed groups.
+        $canviewallgroups = has_capability('gradereport/coifish:viewallgroups', $this->context);
         $teachergroups = groups_get_user_groups($this->courseid, $USER->id);
         $teachergroupids = $teachergroups[0] ?? [];
         $allgroups = groups_get_all_groups($this->courseid, 0, $course->defaultgroupingid);
 
-        // If the teacher belongs to specific groups, show only those.
-        // Otherwise fall back to all groups (e.g. editing teachers not in groups).
-        if (!empty($teachergroupids)) {
+        // Without the cross-group capability, restrict to the teacher's own groups.
+        // With the capability, show every course group (unless the teacher belongs
+        // to specific groups and has nothing else assigned).
+        if (!$canviewallgroups && !empty($teachergroupids)) {
             $filteredgroups = [];
             foreach ($teachergroupids as $gid) {
                 if (isset($allgroups[$gid])) {
@@ -5935,10 +6544,11 @@ class report extends \grade_report {
                GROUP BY fp.userid",
                 array_merge(['cid' => $this->courseid], $inparams)
             );
+            $effectivenow = $this->effective_now();
             foreach ($uids as $uid) {
                 $threads = isset($participations[$uid]) ? (int)$participations[$uid]->threads : 0;
                 $lp = isset($lastposts[$uid]) ? (int)$lastposts[$uid]->lastpost : 0;
-                if ($threads > 0 && $lp > 0 && (time() - $lp) >= $staledays * 86400) {
+                if ($threads > 0 && $lp > 0 && ($effectivenow - $lp) >= $staledays * 86400) {
                     $stalecount++;
                 }
             }
@@ -6389,7 +6999,7 @@ class report extends \grade_report {
         global $DB;
 
         $context = \context_course::instance($this->courseid);
-        $now = time();
+        $now = $this->effective_now();
         $course = get_course($this->courseid);
         $coursestart = $course->startdate ?: ($now - 120 * 86400);
         $daysenrolled = max(1, ($now - $coursestart) / 86400);
