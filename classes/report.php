@@ -1429,6 +1429,7 @@ class report extends \grade_report {
      * @param array $items Items with grade_raw/grademax_raw/graded/isextracredit.
      * @param int $droplow Number of lowest grades to drop.
      * @param int $keephigh Number of highest grades to keep.
+     * @param float $ungradedpct Percentage (0–1) to assume for ungraded items when ranking.
      * @return array Items remaining after drop/keep.
      */
     protected function apply_drop_keep_projected(array $items, int $droplow, int $keephigh, float $ungradedpct = 0.0): array {
@@ -1892,7 +1893,7 @@ class report extends \grade_report {
      * student legitimately skipped.
      *
      * @param array $cat Category data structure.
-     * @param array &$scores Score accumulator.
+     * @param array $scores Score accumulator (passed by reference).
      */
     protected function collect_category_scores(array $cat, array &$scores): void {
         $droplow = (int)($cat['droplow'] ?? 0);
